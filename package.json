@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:tone": "tsx src/lib/tone/heuristic.test.ts"
   },
   "dependencies": {
     "@vercel/config": "^0.12.0",
