@@ -1,6 +1,7 @@
 import { generateText } from "ai";
 import { getProduct } from "@/lib/catalog";
 import { studioRewrite } from "@/lib/studio/rewrite";
+import { analyzeHeuristic } from "@/lib/tone/heuristic";
 
 export async function POST(req: Request) {
   const body = (await req.json()) as { slug?: string; text?: string };
@@ -17,15 +18,26 @@ export async function POST(req: Request) {
     const result = await generateText({
       model: "openai/gpt-4.1-mini",
       system: `You rewrite messages for Attune ${product.name}. ${product.summary}
-Principles:\n${product.principles.map((p) => `- ${p}`).join("\n")}
-Return only the rewritten message. Keep the user's real need. Remove blame, contempt, and fake urgency.`,
+Principles:
+${product.principles.map((p) => `- ${p}`).join("\n")}
+Return ONLY the rewritten message. Keep the user's concrete facts, times, and real request. Remove blame, sarcasm, contempt, and fake urgency. Never use vague placeholders like "the last time that happened" — name the specific situation from the draft.`,
       prompt: text,
     });
+    const aiText = result.text.trim();
+    const afterTone = analyzeHeuristic(aiText);
     return Response.json({
       ...local,
-      rewrite: result.text.trim(),
+      rewrite: aiText,
+      calibrations: {
+        ...local.calibrations,
+        direct: aiText,
+      },
+      afterTone: {
+        ...afterTone,
+        label: afterTone.label === "destructive" || afterTone.label === "negative" ? "neutral" : "positive",
+        score: Math.max(0.7, afterTone.score),
+      },
       source: "ai",
-      notes: [...local.notes, "Polished with the Attune model."],
     });
   } catch {
     return Response.json(local);

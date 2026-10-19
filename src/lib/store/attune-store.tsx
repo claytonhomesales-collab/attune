@@ -92,6 +92,7 @@ export function AttuneProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const data = load();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setConversations(data.conversations);
     setPlanState(data.plan);
     setClarityStreak(data.clarityStreak);

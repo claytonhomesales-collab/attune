@@ -9,10 +9,12 @@ export function ProductActions({
   line,
   openHref,
   emphasis = false,
+  dark = false,
 }: {
   line: CartLine;
   openHref?: string;
   emphasis?: boolean;
+  dark?: boolean;
 }) {
   const cart = useCart();
   const router = useRouter();
@@ -36,7 +38,7 @@ export function ProductActions({
       }
       setMessage(
         data.configured === false
-          ? "Checkout is ready. Add your Stripe secret key and this button charges for real."
+          ? "Checkout is ready. Add your Stripe secret key on Vercel to process live cards."
           : data.message || "Checkout could not start.",
       );
     } finally {
@@ -46,35 +48,55 @@ export function ProductActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {openHref && (
+        <button
+          type="button"
+          onClick={() => router.push(openHref)}
+          className={`rounded-full px-4 py-2 text-xs font-semibold tracking-wide transition ${
+            dark
+              ? "bg-gold text-obsidian hover:bg-gold/90"
+              : emphasis
+                ? "bg-obsidian text-foam hover:bg-sea-deep"
+                : "bg-obsidian text-foam hover:bg-sea-deep"
+          }`}
+        >
+          Open Studio →
+        </button>
+      )}
       <button
         type="button"
         onClick={() => cart.add(line)}
-        className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-          emphasis
-            ? "bg-sea-deep text-foam hover:bg-sea"
-            : "bg-white text-sea-deep shadow-[inset_0_0_0_1px_var(--line)] hover:bg-mist"
+        className={`rounded-full px-3.5 py-2 text-xs font-semibold transition ${
+          dark
+            ? owned
+              ? "bg-white/20 text-white ring-1 ring-white/30"
+              : "bg-white/10 text-foam ring-1 ring-white/20 hover:bg-white/20"
+            : owned
+              ? "bg-sea/15 text-sea-deep ring-1 ring-sea/30"
+              : !openHref && emphasis
+                ? "bg-obsidian text-foam hover:bg-sea-deep"
+                : "bg-white text-ink shadow-[inset_0_0_0_1px_var(--line-strong)] hover:bg-mist/70"
         }`}
       >
-        {owned ? "In cart" : "Add"}
+        {owned ? "✓ In Cart" : "Add to Cart"}
       </button>
       <button
         type="button"
         onClick={() => void buyNow()}
         disabled={pending}
-        className="rounded-full px-4 py-2 text-sm font-semibold text-sea-deep hover:bg-white/60 disabled:opacity-50"
+        className={`rounded-full px-3.5 py-2 text-xs font-semibold transition disabled:opacity-50 ${
+          dark
+            ? "text-gold hover:bg-white/10"
+            : "text-sea-deep hover:bg-sea/10"
+        }`}
       >
-        {pending ? "Opening…" : "Buy now"}
+        {pending ? "Opening Stripe…" : "Subscribe Now"}
       </button>
-      {openHref && (
-        <button
-          type="button"
-          onClick={() => router.push(openHref)}
-          className="rounded-full px-4 py-2 text-sm font-semibold text-ink-soft hover:text-ink"
-        >
-          Open
-        </button>
+      {message && (
+        <p className={`w-full text-xs leading-relaxed ${dark ? "text-foam/75" : "text-ink-soft"}`}>
+          {message}
+        </p>
       )}
-      {message && <p className="w-full text-xs leading-relaxed text-ink-soft">{message}</p>}
     </div>
   );
 }

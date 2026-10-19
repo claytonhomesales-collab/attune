@@ -1,37 +1,26 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { useAttune } from "@/lib/store/attune-store";
-import { ToneBadge } from "./tone-badge";
-import type { ToneResult } from "@/lib/tone/types";
+import { studioRewrite } from "@/lib/studio/rewrite";
 import { analyzeHeuristic, softenSuggestion } from "@/lib/tone/heuristic";
+import { ToneBadge } from "./tone-badge";
 
 export function Composer({ conversationId }: { conversationId: string }) {
-  const { sendMessage, plan } = useAttune();
+  const { sendMessage } = useAttune();
   const [text, setText] = useState("");
-  const [tone, setTone] = useState<ToneResult | null>(null);
-  const [tip, setTip] = useState<string | null>(null);
-  const [rewrite, setRewrite] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
   const [sending, setSending] = useState(false);
 
-  useEffect(() => {
-    if (!text.trim()) {
-      setTone(null);
-      setTip(null);
-      setRewrite(null);
-      return;
-    }
-
-    const handle = window.setTimeout(() => {
-      startTransition(() => {
-        const local = analyzeHeuristic(text);
-        setTone(local);
-        setTip(softenSuggestion(text, local));
-      });
-    }, 220);
-
-    return () => window.clearTimeout(handle);
+  const analysis = useMemo(() => {
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+    const tone = analyzeHeuristic(trimmed);
+    const tip = softenSuggestion(trimmed, tone);
+    const rewrite =
+      tone.label === "negative" || tone.label === "destructive"
+        ? studioRewrite("pause", trimmed).rewrite
+        : null;
+    return { tone, tip, rewrite };
   }, [text]);
 
   async function onSend() {
@@ -41,58 +30,44 @@ export function Composer({ conversationId }: { conversationId: string }) {
     try {
       await sendMessage(conversationId, value);
       setText("");
-      setTone(null);
-      setTip(null);
-      setRewrite(null);
     } finally {
       setSending(false);
     }
   }
 
-  async function askCoach() {
-    if (plan === "free") return;
-    const res = await fetch("/api/coach", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (!res.ok) return;
-    const data = (await res.json()) as { tip: string | null; rewrite: string | null };
-    if (data.tip) setTip(data.tip);
-    if (data.rewrite) setRewrite(data.rewrite);
-  }
-
+  const tone = analysis?.tone ?? null;
+  const tip = analysis?.tip ?? null;
+  const rewrite = analysis?.rewrite ?? null;
   const warn =
     tone && (tone.label === "negative" || tone.label === "destructive");
 
   return (
-    <div className="border-t border-[var(--line)] bg-foam/90 p-4 backdrop-blur md:p-5">
+    <div className="border-t border-[var(--line)] bg-foam/95 p-4 backdrop-blur md:p-5">
       {warn && tip && (
         <div
-          className={`tone-${tone.label} mb-3 animate-rise rounded-xl px-3.5 py-3 text-sm`}
+          className={`tone-${tone.label} mb-3.5 animate-rise rounded-2xl px-4 py-3.5 text-sm`}
           style={{
-            background: "color-mix(in oklab, var(--tone) 10%, white)",
-            boxShadow: "inset 0 0 0 1px color-mix(in oklab, var(--tone) 25%, transparent)",
+            background: "color-mix(in oklab, var(--tone) 9%, white)",
+            boxShadow: "inset 0 0 0 1px color-mix(in oklab, var(--tone) 28%, transparent)",
           }}
         >
-          <p className="font-medium text-ink">Before you send</p>
-          <p className="mt-1 text-ink-soft">{tip}</p>
-          {plan !== "free" && (
-            <button
-              type="button"
-              onClick={askCoach}
-              className="mt-2 text-sm font-medium text-sea underline-offset-2 hover:underline"
-            >
-              Soften with coach
-            </button>
-          )}
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-mono text-[11px] font-semibold uppercase tracking-wider text-ink">
+              Pause Intercept · Before You Send
+            </p>
+            <ToneBadge label={tone.label} score={tone.score} />
+          </div>
+          <p className="mt-1 text-xs text-ink-soft">{tip}</p>
           {rewrite && (
             <button
               type="button"
               onClick={() => setText(rewrite)}
-              className="mt-2 block w-full rounded-lg bg-white px-3 py-2 text-left text-sm text-ink shadow-[inset_0_0_0_1px_var(--line)]"
+              className="mt-2.5 block w-full rounded-xl bg-white px-3.5 py-2.5 text-left text-xs font-medium text-ink shadow-[inset_0_0_0_1px_var(--line-strong)] transition hover:bg-sea/8"
             >
-              Use rewrite: “{rewrite}”
+              <span className="block font-mono text-[10px] uppercase tracking-wider text-sea">
+                Click to apply calibrated rewrite:
+              </span>
+              <span className="mt-0.5 block text-sm text-ink">“{rewrite}”</span>
             </button>
           )}
         </div>
@@ -104,8 +79,8 @@ export function Composer({ conversationId }: { conversationId: string }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={2}
-            placeholder="Write a message…"
-            className="w-full resize-none rounded-2xl border-0 bg-white px-4 py-3 text-[15px] text-ink shadow-[inset_0_0_0_1px_var(--line)] outline-none ring-sea/30 placeholder:text-ink-soft/45 focus:ring-2"
+            placeholder="Write a message… (try typing “You always ignore me” to test live intercept)"
+            className="w-full resize-none rounded-2xl border-0 bg-white px-4 py-3 text-[15px] text-ink shadow-[inset_0_0_0_1px_var(--line-strong)] outline-none ring-sea/30 placeholder:text-ink-soft/45 focus:ring-2"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -114,23 +89,18 @@ export function Composer({ conversationId }: { conversationId: string }) {
             }}
           />
           <div className="pointer-events-none absolute bottom-2.5 right-3 flex items-center gap-2">
-            {tone && !pending && <ToneBadge label={tone.label} />}
+            {tone && <ToneBadge label={tone.label} score={tone.score} />}
           </div>
         </div>
         <button
           type="button"
           onClick={() => void onSend()}
           disabled={!text.trim() || sending}
-          className="rounded-2xl bg-sea-deep px-5 py-3 text-sm font-semibold text-foam transition hover:bg-sea disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-2xl bg-obsidian px-5 py-3 text-sm font-semibold text-foam transition hover:bg-sea-deep disabled:cursor-not-allowed disabled:opacity-40"
         >
           Send
         </button>
       </div>
-      {plan === "free" && warn && (
-        <p className="mt-2 text-xs text-ink-soft/70">
-          Live draft coach unlocks on Plus — heuristics still catch sharp language.
-        </p>
-      )}
     </div>
   );
 }

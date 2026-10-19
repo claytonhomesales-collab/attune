@@ -43,6 +43,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as CartLine[];
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setLines(
           parsed.filter(
             (line) =>

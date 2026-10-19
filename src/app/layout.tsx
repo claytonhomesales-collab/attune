@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Figtree, Fraunces } from "next/font/google";
+import { Figtree, Fraunces, JetBrains_Mono } from "next/font/google";
 import { CartProvider } from "@/lib/store/cart";
 import { AttuneProvider } from "@/lib/store/attune-store";
 import "./globals.css";
@@ -16,19 +16,25 @@ const fraunces = Fraunces({
   display: "swap",
 });
 
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Attune Store — Software for the words that matter",
+  title: "Attune — The Communication Atelier & Software Store",
   description:
-    "Twelve tone apps, sold à la carte or in bundles. Pause, Deal, Desk, Steady, Bench, and the rest of the Attune family.",
+    "Twelve precision instruments for high-stakes human communication. Available à la carte or in curated suites: Mirror, Pause, Thread, Repair, Brief, Deal, Desk, Lead, Hire, Keep, Steady, and Bench.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${figtree.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${figtree.variable} ${fraunces.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans text-ink">
+      <body className="min-h-full flex flex-col font-sans text-ink selection:bg-sea/20">
         <AttuneProvider>
           <CartProvider>{children}</CartProvider>
         </AttuneProvider>

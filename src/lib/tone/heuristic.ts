@@ -26,6 +26,11 @@ const POSITIVE = [
   "awesome",
   "great job",
   "look forward",
+  "happy to",
+  "admired",
+  "completely right",
+  "100% fair",
+  "let's lock",
 ];
 
 const NEGATIVE = [
@@ -46,6 +51,21 @@ const NEGATIVE = [
   "waste of time",
   "ridiculous",
   "over this",
+  "ignore",
+  "bailing",
+  "are you kidding",
+  "moving on to other",
+  "bumping this again",
+  "circling back again",
+  "sloppy",
+  "is a mess",
+  "done being polite",
+  "sick of",
+  "deal with it",
+  "or don't bother",
+  "pulling the offer",
+  "haven't heard back",
+  "never listen",
 ];
 
 const DESTRUCTIVE = [
@@ -76,6 +96,8 @@ const REPAIR = [
   "i care",
   "help me understand",
   "what do you need",
+  "owe you an apology",
+  "personal ownership",
 ];
 
 function countMatches(text: string, phrases: string[]): { count: number; hits: string[] } {
@@ -144,15 +166,15 @@ export function analyzeHeuristic(text: string): ToneResult {
   if (signals.length === 0) signals.push("plain wording");
 
   const summaries: Record<ToneLabel, string> = {
-    positive: "Reads warm and constructive.",
-    neutral: "Mostly even — little emotional charge.",
-    negative: "Carries tension or frustration.",
-    destructive: "Contains language that can harm the relationship.",
+    positive: "Reads warm, grounded, and constructive.",
+    neutral: "Even and factual — low emotional charge.",
+    negative: "Carries friction, pressure, or defensiveness.",
+    destructive: "Contains escalatory language that can damage trust.",
   };
 
   const confidence = Math.min(
-    0.92,
-    0.45 + (pos.count + neg.count + des.count + repair.count) * 0.12,
+    0.95,
+    0.5 + (pos.count + neg.count + des.count + repair.count) * 0.12,
   );
 
   return {
@@ -168,13 +190,13 @@ export function analyzeHeuristic(text: string): ToneResult {
 export function softenSuggestion(text: string, tone: ToneResult): string | null {
   if (tone.label === "positive" || tone.label === "neutral") return null;
   if (tone.label === "destructive") {
-    return "Try naming the feeling without attacking the person — e.g. “I’m hurt and need a minute.”";
+    return "Strip personal attacks and name the exact boundary + next step instead.";
   }
   if (/you always|you never/i.test(text)) {
-    return "Swap “you always/never” for one specific moment and what you need.";
+    return "Replace “you always / you never” with today’s specific moment and the time you need an answer.";
   }
   if (/^(fine|whatever|k|ok)\.?$/i.test(text.trim())) {
-    return "A curt reply can land cold. One honest sentence usually lands better.";
+    return "A one-word shutdown reads as stonewalling. State that you need a breather and when you’ll revisit.";
   }
-  return "Lead with the need under the frustration, then the ask.";
+  return "Lead with the concrete fact and the exact next action you need.";
 }

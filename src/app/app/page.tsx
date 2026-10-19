@@ -1,12 +1,13 @@
 "use client";
 
-import { ConversationRow } from "@/components/conversation-row";
-import { useAttune } from "@/lib/store/attune-store";
-import { computeClimate, computeSelfReport } from "@/lib/tone/climate";
 import Link from "next/link";
+import { ConversationRow } from "@/components/conversation-row";
+import { ProductEmblem } from "@/components/product-emblem";
+import { useAttune } from "@/lib/store/attune-store";
+import { computeClimate, computeSelfReport, scoreToPercent } from "@/lib/tone/climate";
 
 export default function InboxPage() {
-  const { conversations, plan, clarityStreak } = useAttune();
+  const { conversations, clarityStreak } = useAttune();
   const allMessages = conversations.flatMap((c) => c.messages);
   const self = computeSelfReport(allMessages);
   const tense = conversations.filter((c) => {
@@ -15,36 +16,57 @@ export default function InboxPage() {
   }).length;
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-3 pb-10 md:px-6">
-      <div className="px-2 pb-6 pt-2 md:px-0">
-        <h1 className="font-display text-3xl text-sea-deep md:text-4xl">Inbox</h1>
-        <p className="mt-2 text-ink-soft">
-          Climate at a glance. Open a thread to see tone on every message — and yours.
-        </p>
+    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-5 pb-14 pt-6 md:px-8">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--line-strong)] pb-6">
+        <div className="flex items-start gap-4">
+          <span className="mt-1 flex size-12 items-center justify-center rounded-2xl bg-obsidian text-gold shadow-sm">
+            <ProductEmblem slug="mirror" className="size-6" />
+          </span>
+          <div>
+            <span className="font-mono text-xs uppercase tracking-[0.16em] text-sea">
+              Instrument 01 · Personal Telemetry
+            </span>
+            <h1 className="mt-1 font-display text-4xl tracking-tight text-ink md:text-5xl">
+              Mirror Inbox
+            </h1>
+            <p className="mt-2 max-w-xl text-sm text-ink-soft">
+              Climate at a glance across your relationships. Open any thread to see message-by-message tone telemetry and test the live Pause intercept.
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/app/insights"
+          className="rounded-full bg-obsidian px-5 py-2.5 text-xs font-semibold text-gold transition hover:bg-sea-deep"
+        >
+          View Personal Tone Report →
+        </Link>
       </div>
 
-      <div className="mb-5 grid grid-cols-3 gap-2 px-1 md:gap-3">
-        <div className="rounded-2xl bg-white/75 px-3 py-3 shadow-[inset_0_0_0_1px_var(--line)] md:px-4">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-ink-soft/60">
-            Clarity
+      <div className="mt-6 grid grid-cols-3 gap-3 md:gap-4">
+        <div className="card-surface rounded-2xl p-4">
+          <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-soft/65">
+            Your Clarity Score
           </p>
-          <p className="font-display text-2xl text-sea-deep">{self.clarityDays}d</p>
+          <p className="mt-1 font-display text-3xl text-ink">
+            {scoreToPercent(self.avgScore)}
+            <span className="font-mono text-xs text-ink-soft/60">/100</span>
+          </p>
         </div>
-        <div className="rounded-2xl bg-white/75 px-3 py-3 shadow-[inset_0_0_0_1px_var(--line)] md:px-4">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-ink-soft/60">
-            Needs care
+        <div className="card-surface rounded-2xl p-4">
+          <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-soft/65">
+            Clarity Streak
           </p>
-          <p className="font-display text-2xl text-sea-deep">{tense}</p>
+          <p className="mt-1 font-display text-3xl text-ink">{clarityStreak} days</p>
         </div>
-        <div className="rounded-2xl bg-white/75 px-3 py-3 shadow-[inset_0_0_0_1px_var(--line)] md:px-4">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-ink-soft/60">
-            Plan
+        <div className="card-surface rounded-2xl p-4">
+          <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-soft/65">
+            Threads Needing Care
           </p>
-          <p className="font-display text-2xl capitalize text-sea-deep">{plan}</p>
+          <p className="mt-1 font-display text-3xl text-negative">{tense}</p>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-[1.35rem] bg-white/80 shadow-[inset_0_0_0_1px_var(--line)]">
+      <div className="card-surface mt-6 overflow-hidden rounded-[1.6rem]">
         {conversations.map((c, i) => (
           <div
             key={c.id}
@@ -54,13 +76,6 @@ export default function InboxPage() {
           </div>
         ))}
       </div>
-
-      <p className="mt-6 px-2 text-center text-sm text-ink-soft">
-        Streak pulse: {clarityStreak} recent steady days.{" "}
-        <Link href="/app/insights" className="font-medium text-sea underline-offset-2 hover:underline">
-          See your tone report
-        </Link>
-      </p>
     </main>
   );
 }
