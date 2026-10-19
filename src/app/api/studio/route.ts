@@ -58,7 +58,7 @@ ${product.principles.map((p) => `- ${p}`).join("\n")}
 
 Rules — same contract as Outlook Polish:
 - Read the whole draft and rewrite that draft. Do not write a different email.
-- direct, warm, and concise are three registers of the same polished draft (firm, softer, shorter), not three different scenarios.
+- direct, warm, and concise are three different ways of saying the same draft (firm, softer, shorter). Change the wording in each one. A greeting in front of the same sentence is not a tone change.
 - Keep every fact, name, number, time, and request that is actually in the draft.
 - Do not add times, topics, offers, gratitude, apologies, or plans the draft did not contain.
 - Do not echo insults or second-person attacks. When the draft is an accusation, rewrite the request hidden inside it in the user's own words ("you never close the garage" → "I need you to close the garage").
