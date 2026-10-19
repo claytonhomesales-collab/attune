@@ -40,13 +40,13 @@ cp .env.example .env.local
 
 Every app opens as a working trial. Checkout charges when `STRIPE_SECRET_KEY` is set. Library restore uses the Stripe customer email.
 
-## Product / revenue shape
+## The store
 
-| Plan   | Role                                      |
-|--------|-------------------------------------------|
-| Free   | Heuristics, climate, basic self report    |
-| Plus   | AI scoring, rewrite coach, deeper trends  |
-| Family | Shared seats + opt-in mutual climate      |
+Apps: Mirror, Pause, Thread, Repair, Brief, Deal, Desk, Lead, Hire, Keep, Steady, Bench.
+
+Bundles: Personal, Home, Practice, House.
+
+Subscriptions are created in Stripe Checkout with `price_data` (no pre-made Price IDs). After payment, `/checkout/success` writes a signed library cookie. Restore and the billing portal look up the Stripe customer.
 
 ## Scripts
 
