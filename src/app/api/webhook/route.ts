@@ -1,8 +1,10 @@
-import { getStripe } from "@/lib/billing/stripe";
+import Stripe from "stripe";
 
 export async function POST(req: Request) {
-  const stripe = getStripe();
+  const key = process.env.STRIPE_SECRET_KEY;
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  const stripe =
+    key && (key.startsWith("sk_") || key.startsWith("rk_")) ? new Stripe(key) : null;
   if (!stripe || !secret) {
     return Response.json({ received: false, configured: false }, { status: 503 });
   }

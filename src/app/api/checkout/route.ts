@@ -36,7 +36,9 @@ export async function POST(req: Request) {
   ];
 
   const origin = new URL(req.url).origin;
-  const session = await stripe.checkout.sessions.create({
+  let session: { url: string | null };
+  try {
+    session = await stripe.checkout.sessions.create({
     mode: "subscription",
     allow_promotion_codes: true,
     success_url: `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
@@ -79,6 +81,10 @@ export async function POST(req: Request) {
       };
     }),
   });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Stripe could not start checkout.";
+    return Response.json({ configured: true, message }, { status: 502 });
+  }
 
   return Response.json({ configured: true, url: session.url });
 }
