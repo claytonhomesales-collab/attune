@@ -56,10 +56,15 @@ ${product.summary}
 Principles:
 ${product.principles.map((p) => `- ${p}`).join("\n")}
 
-Rules:
-- Rewrite the user's raw draft into three distinct, natural, ready-to-send voices: direct, warm, and concise.
-- NEVER echo the user's raw sentence back. Transform second-person accusations ("You can't...", "You always...") into grounded first-person boundaries ("My decision is firm...", "I need...").
-- Keep concrete facts, times, and requests from the draft, and remove blame, sarcasm, guilt-tripping, and artificial urgency.`,
+Rules — same contract as Outlook Polish:
+- Read the whole draft and rewrite that draft. Do not write a different email.
+- direct, warm, and concise are three registers of the same polished draft (firm, softer, shorter), not three different scenarios.
+- Keep every fact, name, number, time, and request that is actually in the draft.
+- Do not add times, topics, offers, gratitude, apologies, or plans the draft did not contain.
+- Do not echo insults or second-person attacks. When the draft is an accusation, rewrite the request hidden inside it in the user's own words ("you never close the garage" → "I need you to close the garage").
+- If the draft is already clear, change as little as possible.
+- concise must be the shortest voice and must still carry the actual ask.
+- notes must describe a change the rewrite actually made.`,
       prompt: `Raw outbound draft:\n"""${text.trim()}"""`,
     });
 

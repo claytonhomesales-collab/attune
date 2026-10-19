@@ -135,7 +135,7 @@ function isCalmDraft(raw: string, lower: string, tone: ToneResult): boolean {
     return false;
   }
   if (
-    /\b(you can't|you cant|you don't|you dont|you won't|you wont|stop\s+\w+ing|don't talk|dont talk|don't tell|dont tell)\b/i.test(
+    /\b(you can't|you cant|you don't|you dont|you won't|you wont|why can't|why cant|why don't|why dont|why won't|why wont|stop\s+\w+ing|don't talk|dont talk|don't tell|dont tell)\b/i.test(
       lower,
     )
   ) {
@@ -143,6 +143,600 @@ function isCalmDraft(raw: string, lower: string, tone: ToneResult): boolean {
   }
   if (/\b(asap|impressive profile|amazing opportunity|perfect for)\b/i.test(lower)) return false;
   return raw.includes("?") || /^(please|can you|could you|would you|checking|quick|just checking|let me know)\b/i.test(raw.trim());
+}
+
+function cleanAsk(fragment: string): string {
+  return fragment
+    .replace(/[!?.]+/g, "")
+    .replace(/\b(ever|just|even|always|never|seriously|please)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .replace(/^[, ]+|[, ]+$/g, "")
+    .trim();
+}
+
+const PAST_TO_BASE: Record<string, string> = {
+  sent: "send",
+  left: "leave",
+  took: "take",
+  told: "tell",
+  made: "make",
+  did: "do",
+  went: "go",
+  came: "come",
+  said: "say",
+  paid: "pay",
+  brought: "bring",
+  bought: "buy",
+  thought: "think",
+  felt: "feel",
+  found: "find",
+  gave: "give",
+  got: "get",
+  saw: "see",
+  wrote: "write",
+  broke: "break",
+  forgot: "forget",
+  spoke: "speak",
+  drove: "drive",
+  ate: "eat",
+  drank: "drink",
+  wore: "wear",
+  hung: "hang",
+  kept: "keep",
+  slept: "sleep",
+  meant: "mean",
+  heard: "hear",
+  held: "hold",
+  stood: "stand",
+  understood: "understand",
+  built: "build",
+  spent: "spend",
+  lost: "lose",
+  ran: "run",
+  knew: "know",
+  grew: "grow",
+  threw: "throw",
+  chose: "choose",
+  woke: "wake",
+  fell: "fall",
+  led: "lead",
+  met: "meet",
+  sat: "sit",
+  sold: "sell",
+  taught: "teach",
+  caught: "catch",
+  fed: "feed",
+  shut: "shut",
+  put: "put",
+  cut: "cut",
+  let: "let",
+  set: "set",
+  read: "read",
+  hit: "hit",
+  closed: "close",
+  opened: "open",
+  locked: "lock",
+  called: "call",
+  finished: "finish",
+  started: "start",
+  asked: "ask",
+  helped: "help",
+  cleaned: "clean",
+  moved: "move",
+  changed: "change",
+  agreed: "agree",
+  replied: "reply",
+  answered: "answer",
+  ignored: "ignore",
+  canceled: "cancel",
+  cancelled: "cancel",
+  texted: "text",
+  emailed: "email",
+  washed: "wash",
+  packed: "pack",
+  checked: "check",
+  signed: "sign",
+  shipped: "ship",
+  fixed: "fix",
+  booked: "book",
+  confirmed: "confirm",
+  updated: "update",
+  included: "include",
+  returned: "return",
+};
+
+function toInfinitive(phrase: string): string {
+  const match = phrase.match(/^([a-z']+)([\s\S]*)$/i);
+  if (!match) return phrase;
+  const verb = match[1].toLowerCase();
+  const rest = match[2];
+  const mapped = PAST_TO_BASE[verb];
+  if (mapped) return `${mapped}${rest}`;
+  if (!verb.endsWith("ed") || /^(need|feed|bleed|seed|speed)$/i.test(verb)) return phrase;
+  if (verb.endsWith("ied")) return `${verb.slice(0, -3)}y${rest}`;
+  let stem = verb.slice(0, -2);
+  if (stem.length >= 3 && stem.at(-1) === stem.at(-2) && /[^aeiouy]/.test(stem.at(-1) || "")) {
+    stem = stem.slice(0, -1);
+  }
+  if (/[svz]$/.test(stem) || /[^n]g$/.test(stem)) return `${stem}e${rest}`;
+  return `${stem}${rest}`;
+}
+
+function toGerund(phrase: string): string {
+  const match = phrase.match(/^([a-z]+)([\s\S]*)$/i);
+  if (!match) return phrase;
+  const rest = match[2];
+  let verb = match[1].toLowerCase();
+  if (verb.endsWith("ing")) return `${verb}${rest}`;
+  if (verb === "be") return `being${rest}`;
+  if (verb.endsWith("ie")) return `${verb.slice(0, -2)}ying${rest}`;
+  if (verb.endsWith("ee") || verb.endsWith("ye") || verb.endsWith("oe")) return `${verb}ing${rest}`;
+  if (verb.endsWith("e")) verb = verb.slice(0, -1);
+  else if (/^[^aeiou]*[aeiou][^aeiouwxy]$/i.test(verb) && verb.length <= 4) verb = `${verb}${verb.slice(-1)}`;
+  return `${verb}ing${rest}`;
+}
+
+function reflectTheirWords(raw: string): { calibrations: VoiceCalibration; notes: string[] } | null {
+  const text = raw.replace(/[’‘ʼ]/g, "'").replace(/\s+/g, " ").trim();
+  const frames: { pattern: RegExp; polarity: "do" | "stop" | "dont"; skipCognitive?: boolean }[] = [
+    {
+      pattern: /^why (?:can't|cant|don't|dont|won't|wont|aren't|arent) you(?:\s+(?:ever|just|even|always|never))*\s+(.+)$/i,
+      polarity: "do",
+    },
+    {
+      pattern: /^why (?:do|would) you(?:\s+(?:always|still|even|just))*\s+(.+)$/i,
+      polarity: "stop",
+    },
+    {
+      pattern: /^you (?:never|don't|dont|won't|wont|refuse to)\s+(.+)$/i,
+      polarity: "do",
+      skipCognitive: true,
+    },
+    {
+      pattern: /^you always\s+(.+)$/i,
+      polarity: "stop",
+    },
+    {
+      pattern: /^(?:please\s+)?(?:just\s+)?(?:stop|quit)\s+(.+)$/i,
+      polarity: "stop",
+    },
+    {
+      pattern: /^(?:don't|dont)\s+(.+)$/i,
+      polarity: "dont",
+    },
+    {
+      pattern: /^(?:can|could|would) you(?:\s+(?:please|just))*\s+(.+)$/i,
+      polarity: "do",
+    },
+  ];
+
+  for (const frame of frames) {
+    const match = text.match(frame.pattern);
+    const ask = match?.[1] ? cleanAsk(stripNoise(match[1])) : "";
+    if (!askIsUseful(ask)) continue;
+    if (frame.skipCognitive && /^(know|understand|get|see|care|realize|realise|notice|think|believe|mean|have)\b/i.test(ask)) {
+      if (/^have\b/i.test(ask)) continue;
+      const topic = ask.replace(/^(know|understand|get|see|care|realize|realise|notice|think|believe|mean)\s+/i, "").trim();
+      if (/^care$/i.test(ask) || !topic) {
+        return {
+          calibrations: {
+            direct: "I need this to matter here.",
+            warm: "I want this to matter between us.",
+            concise: "I need this to matter.",
+          },
+          notes: [
+            "Turned “you don’t care” into the point that this has to matter.",
+            "The request inside the draft is: this has to matter",
+          ],
+        };
+      }
+      return {
+        calibrations: {
+          direct: `I don't think ${topic} is clear yet.`,
+          warm: `I want ${topic} to be clear between us.`,
+          concise: sentence(`${topic} isn't clear yet`),
+        },
+        notes: [
+          "Turned the accusation into the gap you actually named.",
+          `The request inside the draft is: ${topic}.`,
+        ],
+      };
+    }
+    const said = frame.polarity === "stop" ? ask : toInfinitive(ask);
+    const action = frame.polarity === "stop" ? toGerund(said) : said;
+    const direct =
+      frame.polarity === "stop"
+        ? `I need you to stop ${action}.`
+        : frame.polarity === "dont"
+          ? `I need you not to ${action}.`
+          : `I need you to ${action}.`;
+    const warm =
+      frame.polarity === "stop"
+        ? `Could you stop ${action}?`
+        : frame.polarity === "dont"
+          ? `I'd rather you didn't ${action}.`
+          : `Could you ${action}?`;
+    const concise =
+      frame.polarity === "stop"
+        ? `Please stop ${action}.`
+        : frame.polarity === "dont"
+          ? `Please don't ${action}.`
+          : `Please ${action}.`;
+    return {
+      calibrations: { direct, warm, concise },
+      notes: [
+        "Used the words you actually wrote, instead of a stock line.",
+        `The request inside the draft is: ${frame.polarity === "stop" ? `stop ${action}` : action}.`,
+      ],
+    };
+  }
+  return null;
+}
+
+const CONTRACTIONS: Record<string, string> = {
+  dont: "don't",
+  cant: "can't",
+  wont: "won't",
+  im: "I'm",
+  ive: "I've",
+  id: "I'd",
+  isnt: "isn't",
+  wasnt: "wasn't",
+  didnt: "didn't",
+  doesnt: "doesn't",
+  arent: "aren't",
+  werent: "weren't",
+  wouldnt: "wouldn't",
+  couldnt: "couldn't",
+  shouldnt: "shouldn't",
+  youre: "you're",
+  theyre: "they're",
+  whats: "what's",
+  thats: "that's",
+  lets: "let's",
+};
+
+function stripNoise(value: string): string {
+  return value
+    .replace(/[’‘ʼ]/g, "'")
+    .replace(/\b(um+|uh+|lol+|lmao|omg|wtf|idk)\b/gi, " ")
+    .replace(/\b(i mean|you know|kind of|sort of|i guess|i don't know|i dont know)\b/gi, " ")
+    .replace(/\b(fucking|fuck|shit|damn|goddamn|asshole|bitch|bastard|asap)\b/gi, " ")
+    .replace(/\byou(?:'re| are)?(?:\s+an?)?(?:\s+such an?)?\s+(?:idiot|stupid|moron|jerk|dumbass)\b/gi, "")
+    .replace(/\b(?:what )?an? (?:idiot|stupid|moron|jerk|dumbass)\b/gi, "")
+    .replace(/!{2,}/g, "!")
+    .replace(/\?{2,}/g, "?")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.!?])/g, "$1")
+    .replace(/\(\s*\)/g, "")
+    .trim();
+}
+
+function fixContractions(value: string): string {
+  return value
+    .replace(
+      /\b(dont|cant|wont|im|ive|id|isnt|wasnt|didnt|doesnt|arent|werent|wouldnt|couldnt|shouldnt|youre|theyre|whats|thats|lets)\b/gi,
+      (word) => CONTRACTIONS[word.toLowerCase()] ?? word,
+    )
+    .replace(/\bi\b/g, "I");
+}
+
+function askIsUseful(ask: string): boolean {
+  const words = ask.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || ask.length < 2) return false;
+  if (words.length < 3 && /^(being|it|that|this|so|me|them|a|an|the)$/i.test(words[words.length - 1])) return false;
+  return true;
+}
+
+function splitDraft(raw: string): string[] {
+  const text = stripNoise(raw).replace(/\s+/g, " ").trim();
+  if (!text) return [];
+  const sentences = text.split(/(?<=[.!?])\s+/).map((part) => part.trim()).filter(Boolean);
+  const clauses: string[] = [];
+  for (const part of sentences.length ? sentences : [text]) {
+    const bits = part.split(/,\s+(?:and\s+|but\s+)?(?=(?:you|why|stop|don't|dont|please)\b)/i);
+    for (const bit of bits) {
+      const cleaned = bit.replace(/^(?:and|but)\s+/i, "").replace(/^[, ]+|[, ]+$/g, "").trim();
+      if (cleaned) clauses.push(cleaned);
+    }
+  }
+  const hasApology = clauses.some((clause) => /^(?:i'm sorry|im sorry|sorry|i apologize|i apologise)\b/i.test(clause));
+  if (!hasApology) return clauses;
+  return clauses.filter((clause) => !/^you (?:started|made me|caused|did it|did this)\b/i.test(clause));
+}
+
+function crisp(text: string): string {
+  const asking = /\?\s*$/.test(text.trim());
+  const stripped = text
+    .replace(/\b(really|very|just|actually|basically|honestly)\b/gi, " ")
+    .replace(/[.!?]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const parts = stripped.split(/\s+and\s+/i);
+  let chosen = stripped;
+  if (parts.length > 1 && parts[0].split(/\s+/).length >= 4 && stripped.split(/\s+/).length > 16) {
+    chosen = parts[0];
+  }
+  let words = chosen.split(/\s+/).filter(Boolean);
+  if (words.length > 12) words = words.slice(0, 12);
+  while (words.length > 4 && /^(the|a|an|and|or|but|when|since|of|to|for|with|on|in|at|by)$/i.test(words[words.length - 1] || "")) {
+    words.pop();
+  }
+  const done = sentence(words.join(" "));
+  return asking ? done.replace(/\.$/, "?") : done;
+}
+
+type PolishedClause = {
+  direct: string;
+  warm: string;
+  concise: string;
+  request?: string;
+  changed: boolean;
+};
+
+function clauseVoices(
+  direct: string,
+  warm: string,
+  concise: string,
+  request: string | undefined,
+  changed: boolean,
+): PolishedClause {
+  return {
+    direct: sentence(direct),
+    warm: sentence(warm),
+    concise: sentence(concise),
+    request,
+    changed,
+  };
+}
+
+function softenJudgment(value: string): string {
+  return value
+    .replace(/\b(is|was|are|were) (?:so |absolutely |totally )?(?:ridiculous|unbelievable|absurd|insane|pathetic)\b/gi, "$1 not workable")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function lowerFirst(text: string): string {
+  if (/^I(?:['’]|\s)/.test(text)) return text;
+  const first = text.split(/\s+/)[0]?.replace(/[^\p{L}\p{N}]/gu, "") ?? "";
+  if (/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december)$/i.test(first)) {
+    return text;
+  }
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+function tooThin(value: string): boolean {
+  const words = value.replace(/[.!?]+$/g, "").split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  if (words.length <= 2 && /^(you|why|they|he|she|it)\b/i.test(words[0])) return true;
+  return false;
+}
+
+function lightPolishClause(clause: string): PolishedClause | null {
+  let s = softenJudgment(fixContractions(stripNoise(clause)))
+    .replace(/^(?:hey|hi|hello|so|um|look|listen|honestly|basically|anyway|well)[, ]+/i, "")
+    .replace(/^(?:fine|ok|okay|whatever|look),\s+(?=\S)/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (/^(?:i'm sorry|im sorry|sorry|i apologize|i apologise)\b/i.test(s)) {
+    s = s.replace(/\s+but\s+you\b[^.!?]*$/i, "").trim();
+  }
+  if (!askIsUseful(s.replace(/[.!?]+$/g, "")) && s.split(/\s+/).length < 3) return null;
+
+  const direct = sentence(s);
+  const warm = direct.replace(/\bI need\b/g, "I'd like").replace(/\bI want you to\b/g, "I'd like you to");
+  return clauseVoices(direct, warm, crisp(direct), undefined, normalizeForMatch(direct) !== normalizeForMatch(clause));
+}
+
+function polishClause(clause: string): PolishedClause | null {
+  const cleaned = stripNoise(clause).replace(/[.!?]+$/g, "").trim();
+  if (!cleaned) return null;
+
+  const late = cleaned.match(/^you(?:'re| are) (?:always |so )?late\b/i);
+  if (late) {
+    return clauseVoices("I need you to be on time.", "Could you be on time?", "Please be on time.", "be on time", true);
+  }
+
+  const keepDoing = cleaned.match(/^you (?:can't|cant) (?:just )?(?:keep |keep on )?([a-z]+ing\b.*)$/i);
+  if (keepDoing) {
+    const action = cleanAsk(stripNoise(keepDoing[1]));
+    if (askIsUseful(action)) {
+      return clauseVoices(
+        `I need you to stop ${action}.`,
+        `Could you stop ${action}?`,
+        `Please stop ${action}.`,
+        `stop ${action}`,
+        true,
+      );
+    }
+  }
+
+  const forced = cleaned.match(/^you (?:can't|cant) (?:just )?(?:make|force|guilt|pressure) me (?:to |into )?(.+)$/i);
+  if (forced) {
+    const what = cleanAsk(stripNoise(forced[1]));
+    if (askIsUseful(what)) {
+      return clauseVoices(
+        `I'm not going to ${what}.`,
+        `I'm still not going to ${what}.`,
+        `I'm not going to ${what}.`,
+        what,
+        true,
+      );
+    }
+  }
+
+  const cant = cleaned.match(/^you (?:can't|cant) (?:even |just )?(.+)$/i);
+  if (cant) {
+    const rest = toInfinitive(cleanAsk(stripNoise(cant[1])));
+    if (askIsUseful(rest) && /^(listen|hear|answer|reply|help|try)\b/i.test(rest)) {
+      return clauseVoices(`I need you to ${rest}.`, `Could you ${rest}?`, `Please ${rest}.`, rest, true);
+    }
+    if (askIsUseful(rest) && !/^(be serious|mean that|believe)\b/i.test(rest)) {
+      return clauseVoices(`We can't ${rest}.`, `I don't think we can ${rest}.`, `We can't ${rest}.`, rest, true);
+    }
+  }
+
+  const reflected = reflectTheirWords(cleaned);
+  if (reflected) {
+    const request = reflected.notes[1]
+      ?.match(/^The request inside the draft is:\s*(.+)$/i)?.[1]
+      ?.replace(/\.$/, "");
+    return {
+      direct: reflected.calibrations.direct,
+      warm: reflected.calibrations.warm,
+      concise: reflected.calibrations.concise,
+      request,
+      changed: true,
+    };
+  }
+
+  const light = lightPolishClause(clause);
+  if (light && !tooThin(light.direct)) return light;
+  if (/\b(idiot|stupid|moron|shut up|screw you|go to hell)\b/i.test(clause)) {
+    return clauseVoices(
+      "I need this said plainly, without the insult.",
+      "I want this said plainly, and without the insult.",
+      "Please say it without the insult.",
+      undefined,
+      true,
+    );
+  }
+  return light && !tooThin(light.direct) ? light : null;
+}
+
+function polishDraft(raw: string): { calibrations: VoiceCalibration; notes: string[] } | null {
+  const clauses = splitDraft(raw).map(polishClause).filter((clause): clause is PolishedClause => clause !== null);
+  if (clauses.length === 0) {
+    if (/\b(idiot|stupid|moron|jerk|shut up|screw you|go to hell)\b/i.test(raw)) {
+      return {
+        calibrations: {
+          direct: "I need this said plainly, without the insult.",
+          warm: "I want this said plainly, and without the insult.",
+          concise: "Please say it without the insult.",
+        },
+        notes: [
+          "The draft was an insult without a request, so the reply only drops the insult.",
+          "Did not invent a topic, a time, or a next step.",
+        ],
+      };
+    }
+    return null;
+  }
+
+  const direct = clauses.map((clause) => clause.direct).join(" ");
+  let warm = clauses.map((clause) => clause.warm).join(" ");
+  let concise =
+    clauses.find((clause) => clause.request)?.concise ||
+    clauses.find((clause) => clause.direct.includes("?"))?.concise ||
+    clauses[0].concise;
+  if (clauses.length > 1 && normalizeForMatch(concise) === normalizeForMatch(direct)) {
+    concise = crisp(clauses[0].direct);
+  }
+  if (normalizeForMatch(warm) === normalizeForMatch(direct)) {
+    warm = `Hey — ${lowerFirst(direct)}`;
+  }
+
+  const request = clauses.find((clause) => clause.request)?.request;
+  const changed = clauses.some((clause) => clause.changed) || normalizeForMatch(direct) !== normalizeForMatch(raw);
+  if (normalizeForMatch(direct) === normalizeForMatch(raw) && /\b(you always|you never|idiot|stupid|shut up|guilt me)\b/i.test(raw)) {
+    return null;
+  }
+
+  return {
+    calibrations: { direct, warm, concise },
+    notes: [
+      request
+        ? `Kept the request in your words: ${request}.`
+        : "Polished the draft in place, instead of replacing it with a different letter.",
+      changed
+        ? "Cut filler and blame, and left the facts, times, and requests you actually wrote."
+        : "The wording was already clear, so only the tone shifted.",
+    ],
+  };
+}
+
+function logisticsCalibration(
+  raw: string,
+  lower: string,
+  timeRef: string | null,
+): { calibrations: VoiceCalibration; notes: string[] } | null {
+  const trimmed = lower.trim().replace(/[.!]+$/g, "");
+  if (/^(fine|whatever|k|ok|okay|do what you want|forget it|i don't care|idc)$/.test(trimmed)) {
+    const until = timeRef ? ` I'll come back to it ${timeRef}.` : "";
+    return {
+      calibrations: {
+        direct: `I'm too frustrated to keep talking about this right now. I need a break before we go any further.${until}`,
+        warm: timeRef
+          ? `I'm worn out, and I don't want to say something I'll regret. I need to step away until ${timeRef}.`
+          : "I'm worn out, and I don't want to say something I'll regret. I need to step away from this for a bit.",
+        concise: "I need a break from this right now.",
+      },
+      notes: [
+        "Said that you're too frustrated to keep going, without pretending you don't care.",
+        timeRef ? `Kept ${timeRef}, because you named when you'd return.` : "Did not invent a clock time to restart.",
+      ],
+    };
+  }
+
+  if (
+    /\b(ignored me|ignoring me|you ignore|you ignored|ghost(?:ed|ing)?(?: me)?|never reply|don't reply|haven't heard back|havent heard back|go unanswered|unanswered)\b/i.test(
+      lower,
+    )
+  ) {
+    const about = extractAbout(raw);
+    const allDay = /\ball day\b/i.test(lower);
+    const replyBy = timeRef ? ` I need it by ${timeRef}.` : "";
+    return {
+      calibrations: {
+        direct: about
+          ? `I haven't heard back about ${about}${allDay ? " all day" : ""}. I need a reply, even a short one.${replyBy}`
+          : allDay
+            ? `Not hearing back all day bothers me. I need a reply, even a short one.${replyBy}`
+            : `I haven't heard back. I need a reply, even a short one.${replyBy}`,
+        warm: about
+          ? `It's hard for me when I don't hear back about ${about}. Even a quick reply would help.`
+          : "It's hard for me when I don't hear back. Even a quick reply would help.",
+        concise: about
+          ? `Haven't heard back about ${about}. Please reply when you can.`
+          : "Not hearing back bothers me. Please reply when you can.",
+      },
+      notes: [
+        "Replaced the blame with the fact that you haven't heard back, and asked for a reply.",
+        !about && !timeRef
+          ? "Did not invent a plan, a count of texts, or a deadline you didn't name."
+          : "Kept the detail you named, and left out anything you didn't.",
+      ],
+    };
+  }
+
+  if (
+    /\b(cancel|canceling|cancelling|bail|bailing|flak)\b/i.test(lower) &&
+    /\b(you|again|late|minutes before|mins before|last minute)\b/i.test(lower)
+  ) {
+    const notice = extractNotice(raw);
+    const again = /\bagain\b/i.test(lower);
+    const late = notice ? `${notice} before we meet` : "this late";
+    return {
+      calibrations: {
+        direct: `Canceling ${late}${again ? ", and not for the first time," : ""} is really frustrating. I need you to tell me earlier when plans change.`,
+        warm: again
+          ? "I'm disappointed, and this has happened before. If plans change, please let me know as early as you can."
+          : "I'm disappointed. If plans change, please let me know as early as you can.",
+        concise: notice
+          ? `Canceling ${notice} out${again ? " again" : ""} is hard on me. I need more notice.`
+          : `Canceling this late${again ? " again" : ""} is hard on me. I need more notice.`,
+      },
+      notes: [
+        notice
+          ? `Kept the ${notice} notice and asked for earlier warning.`
+          : "Asked for earlier warning without inventing how late the cancellation was.",
+        again ? "Kept that this has happened before, because you said again." : "Did not claim this has happened before.",
+      ],
+    };
+  }
+
+  return null;
 }
 
 function clipWords(text: string, max: number): string {
@@ -306,12 +900,15 @@ function calmCalibrations(raw: string): { calibrations: VoiceCalibration; notes:
       : sentence(question);
   const warm = stillWorks
     ? `Are you still good for ${stillWorks[2]} ${stillWorks[1]}?`
-    : `Hey — ${direct.charAt(0).toLowerCase()}${direct.slice(1)}`;
+    : `Hey — ${lowerFirst(direct)}`;
   const trimmedAsk = direct
     .replace(/^can we\s+/i, "")
     .replace(/^could we\s+/i, "")
     .replace(/^would you\s+/i, "")
-    .replace(/^please\s+/i, "");
+    .replace(/^please\s+/i, "")
+    .replace(/\bjust\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
   const shortened = `${trimmedAsk.charAt(0).toUpperCase()}${trimmedAsk.slice(1)}`;
   const shortTopic = stillWorks ? stillWorks[2].replace(/^the\s+/i, "") : "";
   const concise = stillWorks
@@ -583,6 +1180,17 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
   const archetype = detectInterpersonalArchetype(raw, lower, timeRef, subject);
   if (archetype) return archetype;
 
+  const route = fitsStudio(slug, lower) ? slug : "pause";
+  if (route === "pause") {
+    const logistics = logisticsCalibration(raw, lower, timeRef);
+    if (logistics) return logistics;
+  }
+
+  // Outlook-style polish: rewrite this draft in place. Studio letters below
+  // only run when the draft has no sentence left to keep.
+  const polished = polishDraft(raw);
+  if (polished) return polished;
+
   if (tone.label === "destructive") {
     notes.push("Removed personal attacks and contemptuous phrasing so the recipient focuses on your actual request.");
   } else if (tone.label === "negative") {
@@ -590,8 +1198,6 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
   } else {
     notes.push("Tightened the structure so your main ask lands in the first sentence.");
   }
-
-  const route = fitsStudio(slug, lower) ? slug : "pause";
 
   switch (route) {
     case "repair": {
@@ -818,6 +1424,9 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
         return archetype;
       }
 
+      const reflected = reflectTheirWords(raw);
+      if (reflected) return reflected;
+
       if (/\b(you always|you never)\b/i.test(lower)) {
         notes.push("Shifted from “you always / you never” (which triggers instant defensiveness) to today's specific situation and what you need next.");
         const about = subject || "what happened today";
@@ -872,7 +1481,7 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
 }
 
 export function studioRewrite(slug: string, raw: string): StudioResult {
-  const text = raw.trim();
+  const text = raw.replace(/[’‘ʼ]/g, "'").trim();
   const tone = analyzeHeuristic(text);
 
   if (!text) {
