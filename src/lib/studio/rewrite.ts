@@ -420,7 +420,7 @@ function detectInterpersonalArchetype(
 
   // 3. Feeling unheard, interrupted, dismissed, invalidated ("You never listen to me", "Stop talking over me")
   if (
-    /\b(never listen|don't listen|dont listen|not listening|talking over me|talk over me|interrupt|dismiss|invalidat|hear a word|talking to a wall|talk to a wall|ignore what i say|don't care how i feel|my feelings don't matter)\b/i.test(
+    /\b(never listen|don't listen|dont listen|not listening|won't listen|wont listen|aren't listening|arent listening|just listen|ever listen|listen to me|hear me out|hear a word|talking over me|talk over me|interrupt|dismiss|invalidat|talking to a wall|talk to a wall|ignore what i say|don't care how i feel|my feelings don't matter)\b/i.test(
       lower,
     )
   ) {
@@ -434,7 +434,7 @@ function detectInterpersonalArchetype(
         concise: "I don't feel heard. Please just listen.",
       },
       notes: [
-        "Replaced “you never listen” with what is true right now: you don't feel heard.",
+        "Replaced “why can’t you ever just listen” with what is true right now: you don't feel heard.",
         interrupted
           ? "Kept the interruption, because you named it, and asked to finish."
           : "Did not invent an interruption or a timer the draft never mentioned.",
