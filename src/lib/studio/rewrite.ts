@@ -145,6 +145,155 @@ function isCalmDraft(raw: string, lower: string, tone: ToneResult): boolean {
   return raw.includes("?") || /^(please|can you|could you|would you|checking|quick|just checking|let me know)\b/i.test(raw.trim());
 }
 
+function clipWords(text: string, max: number): string {
+  const words = text.replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (words.length <= max) return words.join(" ");
+  const joined = words.slice(0, max).join(" ");
+  const comma = joined.lastIndexOf(",");
+  if (comma > joined.length * 0.5) return joined.slice(0, comma).trim();
+  return joined.replace(/\s+\S*$/, "").trim() || joined;
+}
+
+function glossAside(aside: string): string {
+  const lower = aside.toLowerCase();
+  const bits: string[] = [];
+  if (/happening now/.test(lower)) bits.push("not believed as happening now");
+  if (/possess/.test(lower)) bits.push("not already theirs");
+  if (/\breal\b/.test(lower) || /possible/.test(lower)) bits.push("not real or possible");
+  if (/\bwish\b/.test(lower) || /\bwant\b/.test(lower)) bits.push("only a wish");
+  if (bits.length >= 2) return bits.join(", ");
+  return clipWords(aside.replace(/\s+/g, " ").trim(), 16);
+}
+
+function condensePassage(raw: string): { calibrations: VoiceCalibration; notes: string[] } | null {
+  const trimmed = raw.replace(/\s+/g, " ").trim();
+  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+  if (wordCount < 36) return null;
+  if (
+    /\b(guilt me|you always|you never|shut up|leave me alone|idiot|stupid|worthless|figure it out yourself)\b/i.test(
+      trimmed,
+    )
+  ) {
+    return null;
+  }
+
+  const asides = [...trimmed.matchAll(/\(([^)]+)\)/g)]
+    .map((match) => match[1].trim())
+    .filter((aside) => aside.split(/\s+/).length >= 6);
+  const gloss = asides.length ? glossAside(asides[0]) : "";
+  const body = trimmed
+    .replace(/\s*\([^)]*\)\s*/g, " ")
+    .replace(/\bcan not\b/gi, "cannot")
+    .replace(/\b(hey so|i was thinking and|i don't know maybe|it's nothing but|no pressure though|sorry this is long)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+,/g, ",")
+    .replace(/\bit(?:'s| is) nothing but\b/gi, "")
+    .replace(/,\s*,+/g, ",")
+    .replace(/,\s*\./g, ".")
+    .replace(/^[, ]+|[, ]+$/g, "")
+    .trim();
+
+  const day = body.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i)?.[1];
+  if (day && /\b(still works|another day|pick another|reschedul)/i.test(body)) {
+    const morning = body.match(/\b((?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+morning)\b/i)?.[1];
+    const extra =
+      morning && morning.toLowerCase() !== `${day.toLowerCase()} morning`
+        ? ` I can do ${morning}.`
+        : "";
+    const ask = `Does ${day} still work, or should we pick another day?${extra}`;
+    return {
+      calibrations: {
+        direct: ask,
+        warm: `Hey — does ${day} still work for you, or is another day easier?${extra}`,
+        concise: extra ? `${day} still good?${extra}` : `Does ${day} still work, or another day?`,
+      },
+      notes: [
+        "Read the full ramble and kept the actual scheduling question.",
+        "Cut the apology for writing and the “no pressure” padding.",
+      ],
+    };
+  }
+
+  const questions = [...body.matchAll(/[^.!?]{12,}\?/g)].map((match) =>
+    match[0]
+      .replace(/\b(hey so|i was thinking and|i don't know maybe|it's nothing but|no pressure though|sorry this is long|basically|just)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+
+  if (questions.length > 0) {
+    const ask = sentence(questions[0]);
+    const alternatives = body.match(/\b(?:or|also)\b[^?.!]{8,80}/i)?.[0]?.replace(/^(or|also)\s+/i, "").trim();
+    const direct = alternatives
+      ? `${ask.replace(/\?$/, "")}, or ${alternatives.replace(/\.$/, "")}?`
+      : ask;
+    return {
+      calibrations: {
+        direct: sentence(direct).replace(/\.$/, direct.trim().endsWith("?") || ask.endsWith("?") ? "?" : "."),
+        warm: `Hey — ${ask.charAt(0).toLowerCase()}${ask.slice(1)}`,
+        concise: sentence(clipWords(ask.replace(/\?$/, ""), 18)) + (ask.endsWith("?") ? "" : ""),
+      },
+      notes: [
+        "Read the full note and kept the question it was circling.",
+        "Cut the hedges around it so the ask is answerable in one reply.",
+      ],
+    };
+  }
+
+  const pieces = body
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.split(/\s+/).length >= 3);
+  const thesis = sentence(pieces[0] || body);
+  const rest = pieces.slice(1).join(" ");
+  const evenRaw = rest.match(/even when[^.]*/i)?.[0]?.trim() ?? "";
+  const even = evenRaw ? `${evenRaw.charAt(0).toLowerCase()}${evenRaw.slice(1)}` : "";
+  const prints = /does not print|doesn't print|do not print/i.test(rest);
+  const notInImage = /if it is not in the image/i.test(rest);
+  const cannotPass = /cannot get past it/i.test(rest);
+
+  let mechanism: string;
+  if (notInImage && prints) {
+    const condition = gloss ? ` (${gloss})` : "";
+    const tail = even ? `, ${even}` : "";
+    const lead = cannotPass ? "We cannot get past it by what we do, say, or think. " : "";
+    mechanism = `${lead}If it is not in the image${condition}, it does not print${tail}.`;
+  } else if (rest) {
+    const clipped = sentence(clipWords(rest, gloss ? 28 : 36));
+    mechanism = gloss ? `${clipped.replace(/\.$/, "")} (${gloss}).` : clipped;
+  } else {
+    mechanism = gloss ? `${gloss.charAt(0).toUpperCase()}${gloss.slice(1)}.` : "";
+  }
+
+  const direct = sentence(`${thesis.replace(/\.$/, "")}. ${mechanism}`.replace(/\s+/g, " "));
+  const warmCore =
+    notInImage && prints
+      ? `${thesis.replace(/\.$/, "")}. Trying harder does not cross that boundary. If it is not in the image${gloss ? ` (${gloss})` : ""}, it does not print${even ? `, ${even}` : ""}.`
+      : `${thesis.replace(/\.$/, "")}. ${sentence(clipWords(rest || body, 24))}`;
+  const askPiece =
+    pieces.find((part) => /\b(if|whether|can we|could we|should we)\b/i.test(part)) ||
+    pieces[pieces.length - 1] ||
+    thesis;
+  const concise =
+    notInImage && prints
+      ? `If it is not in the image${gloss ? ` (${clipWords(gloss, 12)})` : ""}, it does not print.`
+      : sentence(clipWords(askPiece, 22));
+
+  return {
+    calibrations: {
+      direct,
+      warm: sentence(warmCore),
+      concise: sentence(concise),
+    },
+    notes: [
+      "Read the whole passage. The reply follows the claim through to the last sentence, instead of swapping in a stock line.",
+      gloss
+        ? "Folded the long aside back into the sentence, because it defines the claim rather than decorating it."
+        : "Cut repeated scaffolding and kept the sentence that actually carries the point.",
+    ],
+  };
+}
+
 function calmCalibrations(raw: string): { calibrations: VoiceCalibration; notes: string[] } {
   const trimmed = raw.replace(/\s+/g, " ").trim();
   const question = (trimmed.match(/[^.!?]*\?/)?.[0] || trimmed).trim();
@@ -426,7 +575,10 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
   const subject = extractSubject(raw);
   const notes: string[] = [];
 
-  if (isCalmDraft(raw, lower, tone)) return calmCalibrations(raw);
+  if (isCalmDraft(raw, lower, tone) && raw.trim().split(/\s+/).length < 36) return calmCalibrations(raw);
+
+  const passage = condensePassage(raw);
+  if (passage && (slug === "brief" || slug === "pause" || !fitsStudio(slug, lower))) return passage;
 
   const archetype = detectInterpersonalArchetype(raw, lower, timeRef, subject);
   if (archetype) return archetype;

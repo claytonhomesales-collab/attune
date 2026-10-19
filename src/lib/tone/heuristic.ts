@@ -190,11 +190,14 @@ export function analyzeHeuristic(text: string): ToneResult {
     /^(k|ok|fine|sure|whatever|idc|k\.|nope|nah)$/i.test(text.trim()) ||
     normalized === "fine.";
 
-  // Detect second-person accusatory patterns ("you can't...", "you don't...", "stop...")
+  // Accusatory "you don't / you can't" addressed at the reader.
+  // Ignore the same words inside a parenthetical definition ("believing you don't possess it").
+  const spoken = normalized.replace(/\([^)]*\)/g, " ");
   const accusatory =
-    /\b(you can't|you cant|you don't|you dont|you won't|you wont|you only|why do you|why can't you|stop\s+\w+ing)\b/i.test(
-      normalized,
-    );
+    /\b(you can't|you cant|you won't|you wont|you only|why do you|why can't you|stop\s+\w+ing)\b/i.test(
+      spoken,
+    ) ||
+    /\byou (?:don't|dont) (?!possess|have|believe|think|know|see|want|need|mean)\b/i.test(spoken);
 
   let score =
     pos.count * 0.28 +
