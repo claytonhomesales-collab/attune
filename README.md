@@ -1,6 +1,6 @@
 # Attune
 
-**See how you sound.** A tone-aware messaging companion that scores conversation climate (warm / even / tense / harmful) and mirrors *your* patterns so relationships get clearer.
+**Software for the words that matter.** A store of twelve tone apps, sold à la carte or in bundles.
 
 ## Why it retains
 
@@ -29,14 +29,16 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Optional AI features:
+Optional AI and billing:
 
 ```bash
 cp .env.example .env.local
-# add AI_GATEWAY_API_KEY
+# AI_GATEWAY_API_KEY — richer rewrites
+# STRIPE_SECRET_KEY — live Checkout subscriptions
+# STRIPE_WEBHOOK_SECRET — optional Stripe webhook at /api/webhook
 ```
 
-On Pricing, switch the demo plan to **Plus** to exercise AI-path draft coaching (falls back to heuristics without a key).
+Every app opens as a working trial. Checkout charges when `STRIPE_SECRET_KEY` is set. Library restore uses the Stripe customer email.
 
 ## Product / revenue shape
 

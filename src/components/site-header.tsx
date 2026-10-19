@@ -3,21 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense } from "react";
+import { useCart } from "@/lib/store/cart";
 
 const links = [
-  { href: "/app", label: "Inbox" },
-  { href: "/app/insights", label: "Your tone" },
-  { href: "/pricing", label: "Pricing" },
+  { href: "/", label: "Store" },
+  { href: "/#bundles", label: "Bundles" },
+  { href: "/library", label: "Library" },
+  { href: "/app", label: "Mirror" },
 ];
 
 function HeaderNav() {
   const pathname = usePathname();
+  const cart = useCart();
 
   return (
     <nav className="flex items-center gap-1 text-sm md:gap-2">
       {links.map((link) => {
-        const active =
-          pathname === link.href || pathname.startsWith(`${link.href}/`);
+        const active = link.href === "/" ? pathname === "/" : pathname === link.href || pathname.startsWith(`${link.href}/`);
         return (
           <Link
             key={link.href}
@@ -32,6 +34,14 @@ function HeaderNav() {
           </Link>
         );
       })}
+      <Link
+        href="/cart"
+        className={`rounded-md px-3 py-1.5 transition-colors ${
+          pathname === "/cart" ? "bg-sea/10 text-sea-deep" : "text-ink-soft hover:bg-mist hover:text-ink"
+        }`}
+      >
+        Cart{cart.count > 0 ? ` ${cart.count}` : ""}
+      </Link>
     </nav>
   );
 }
@@ -45,7 +55,7 @@ export function SiteHeader({ compact = false }: { compact?: boolean }) {
         </span>
         {!compact && (
           <span className="hidden text-sm text-ink-soft/70 sm:inline">
-            See how you sound
+            The store
           </span>
         )}
       </Link>
