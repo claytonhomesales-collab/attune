@@ -102,7 +102,7 @@ export const products: Product[] = [
     ],
     preview: {
       before: "You always ignore my texts all day and then act confused when I’m annoyed.",
-      after: "I texted twice today about dinner and didn’t hear back. Can you let me know by 5 if we’re still on?",
+      after: "Not hearing back all day bothers me. Please reply when you can.",
       shift: "Harmful 19 → Clear 86",
     },
     samples: [
@@ -112,16 +112,14 @@ export const products: Product[] = [
         text: "You always ignore my texts all day and then act confused when I'm annoyed. This is ridiculous.",
         rewrites: {
           direct:
-            "I texted you twice today about tonight's plans and didn't hear back. When I'm left guessing all afternoon, it throws off my evening. Can you let me know by 5 if we're still on?",
+            "I get annoyed when my texts go unanswered all day, and I want to be clear about why I'm upset. I need a reply, even a short one.",
           warm:
-            "Hey — I sent a couple of texts earlier about dinner and hadn't heard back, so I wasn't sure how to plan my evening. Are we still good for tonight, or should we move it to tomorrow?",
-          concise:
-            "I hadn't heard back on my texts about dinner — let me know by 5 if tonight still works.",
+            "I'm not trying to start a fight. It's hard for me when I don't hear back all day, and even a quick reply would help a lot.",
+          concise: "Not hearing back all day bothers me. Please reply when you can.",
         },
         notes: [
-          "Replaced “you always ignore me” with the concrete fact: two unanswered texts about tonight.",
-          "Cut “act confused” and “this is ridiculous,” which invite a fight about character instead of an answer about dinner.",
-          "Ended with a clear 5:00pm check-in so the other person knows how to resolve it.",
+          "Replaced “you always ignore me” and “this is ridiculous” with the fact that the texts went unanswered all day.",
+          "Asked for a reply without inventing dinner, a count of texts, or a 5:00 deadline.",
         ],
       },
       {
@@ -130,15 +128,14 @@ export const products: Product[] = [
         text: "Fine. Whatever. Do what you want, I don't care anymore.",
         rewrites: {
           direct:
-            "I do care about how we decide this, and I'm too frustrated right now to talk about it productively. Give me an hour to cool off and let's revisit it at 7.",
+            "I'm too frustrated to keep talking about this right now. I need a break before we go any further.",
           warm:
-            "I'm feeling overwhelmed and don't want to say something I don't mean. Can we pause for a bit and talk through this tonight once we've both had a breather?",
-          concise:
-            "I'm too frustrated to talk this through well right now. Let's pause and revisit at 7.",
+            "I'm worn out, and I don't want to say something I'll regret. I need to step away from this for a bit.",
+          concise: "I need a break from this right now.",
         },
         notes: [
-          "Replaced the stonewalling (“Fine. Whatever.”) with the truth: you do care, and you're flooded.",
-          "Named a specific time to return (7:00) so taking space reads as self-regulation, not abandonment.",
+          "Replaced “Fine. Whatever. I don't care” with the truth: you're too frustrated to keep going.",
+          "Asked for a break without inventing an hour, 7:00, or tonight.",
         ],
       },
       {
@@ -147,15 +144,14 @@ export const products: Product[] = [
         text: "Seriously? You're bailing again 20 minutes before we meet? Unbelievable.",
         rewrites: {
           direct:
-            "Canceling 20 minutes before we're supposed to meet throws off my whole evening. I need us to stick to plans we confirm, or give a heads-up earlier in the day.",
+            "Canceling 20 minutes before we meet, and not for the first time, is really frustrating. I need you to tell me earlier when plans change.",
           warm:
-            "I already rearranged my evening to head over, so a 20-minute heads-up is tough on my schedule. Let's only lock in a new time when we're both sure we can make it.",
-          concise:
-            "A 20-minute cancellation is tough when I've already cleared my evening. Next time, please let me know earlier in the day.",
+            "I'm disappointed, and this has happened before. If plans change, please let me know as early as you can.",
+          concise: "Canceling 20 minutes out again is hard on me. I need more notice.",
         },
         notes: [
-          "Kept the boundary firm — canceling 20 minutes out is not okay — without the sarcasm (“Seriously? Unbelievable.”).",
-          "Stated the standard for next time clearly so the message commands respect.",
+          "Kept the 20 minutes and the fact that it happened again.",
+          "Dropped “Seriously?” and “Unbelievable,” and did not invent a rearranged evening.",
         ],
       },
     ],
