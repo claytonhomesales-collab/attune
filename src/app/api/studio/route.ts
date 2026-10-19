@@ -1,7 +1,35 @@
-import { generateText } from "ai";
+import { generateText, Output } from "ai";
+import { z } from "zod";
 import { getProduct } from "@/lib/catalog";
 import { studioRewrite } from "@/lib/studio/rewrite";
 import { analyzeHeuristic } from "@/lib/tone/heuristic";
+
+const studioSchema = z.object({
+  calibrations: z.object({
+    direct: z
+      .string()
+      .describe(
+        "Direct & Clear voice: firm boundary, concrete ask, zero contempt or blame.",
+      ),
+    warm: z
+      .string()
+      .describe(
+        "Warm & Collaborative voice: softens the landing and preserves the relationship while keeping the exact point.",
+      ),
+    concise: z
+      .string()
+      .describe(
+        "Short & Crisp voice: one-breath SMS or Slack length, calm and unmistakable.",
+      ),
+  }),
+  notes: z
+    .array(z.string())
+    .min(2)
+    .max(3)
+    .describe(
+      "2-3 short editorial coaching bullets explaining what shifted and why.",
+    ),
+});
 
 export async function POST(req: Request) {
   const body = (await req.json()) as { slug?: string; text?: string };
@@ -10,32 +38,57 @@ export async function POST(req: Request) {
   const local = studioRewrite(slug, text);
   const product = getProduct(slug);
 
-  if (!text.trim() || !process.env.AI_GATEWAY_API_KEY || !product) {
+  const hasGatewayAuth = Boolean(
+    process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN,
+  );
+
+  if (!text.trim() || !hasGatewayAuth || !product) {
     return Response.json(local);
   }
 
   try {
     const result = await generateText({
       model: "openai/gpt-4.1-mini",
-      system: `You rewrite messages for Attune ${product.name}. ${product.summary}
+      output: Output.object({ schema: studioSchema }),
+      system: `You are the calibration engine for Attune ${product.name} (${product.eyebrow}).
+${product.summary}
+
 Principles:
 ${product.principles.map((p) => `- ${p}`).join("\n")}
-Return ONLY the rewritten message. Keep the user's concrete facts, times, and real request. Remove blame, sarcasm, contempt, and fake urgency. Never use vague placeholders like "the last time that happened" — name the specific situation from the draft.`,
-      prompt: text,
+
+Rules:
+- Rewrite the user's raw draft into three distinct, natural, ready-to-send voices: direct, warm, and concise.
+- NEVER echo the user's raw sentence back. Transform second-person accusations ("You can't...", "You always...") into grounded first-person boundaries ("My decision is firm...", "I need...").
+- Keep concrete facts, times, and requests from the draft, and remove blame, sarcasm, guilt-tripping, and artificial urgency.`,
+      prompt: `Raw outbound draft:\n"""${text.trim()}"""`,
     });
-    const aiText = result.text.trim();
-    const afterTone = analyzeHeuristic(aiText);
+
+    const object = result.output;
+    if (!object) {
+      return Response.json(local);
+    }
+
+    const directText = object.calibrations.direct.trim() || local.calibrations.direct;
+    const warmText = object.calibrations.warm.trim() || local.calibrations.warm;
+    const conciseText = object.calibrations.concise.trim() || local.calibrations.concise;
+    const afterTone = analyzeHeuristic(directText);
+
     return Response.json({
       ...local,
-      rewrite: aiText,
+      rewrite: directText,
       calibrations: {
-        ...local.calibrations,
-        direct: aiText,
+        direct: directText,
+        warm: warmText,
+        concise: conciseText,
       },
+      notes: object.notes.length > 0 ? object.notes : local.notes,
       afterTone: {
         ...afterTone,
-        label: afterTone.label === "destructive" || afterTone.label === "negative" ? "neutral" : "positive",
-        score: Math.max(0.7, afterTone.score),
+        label:
+          afterTone.label === "destructive" || afterTone.label === "negative"
+            ? "neutral"
+            : "positive",
+        score: Math.max(0.74, afterTone.score),
       },
       source: "ai",
     });

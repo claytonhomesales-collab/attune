@@ -29,12 +29,6 @@ function normalizeForMatch(text: string): string {
     .trim();
 }
 
-function ensurePeriod(text: string): string {
-  const value = tidy(text);
-  if (!value) return value;
-  return /[.!?]$/.test(value) ? value : `${value}.`;
-}
-
 function extractTimeReference(text: string): string | null {
   const match = text.match(
     /\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)|today|tonight|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|this week|next week|this afternoon|this morning|\d+\s*(?:minutes|mins|hours|days))\b/i,
@@ -63,30 +57,212 @@ function extractSubject(text: string): string | null {
   return null;
 }
 
-function cleanUserClause(raw: string): string {
-  const sentences = raw
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const filtered = sentences.filter(
-    (s) =>
-      !/^(fine|whatever|k|seriously|unbelievable|this is ridiculous|i'm done|forget it|bumping this|just circling back)[.!?]*$/i.test(
-        s,
-      ),
+function extractSpecificActionAfterInto(text: string): string | null {
+  const match = text.match(
+    /\binto\s+([a-z0-9\s']+?)(?:[.!?,;]|$)/i,
   );
+  if (!match) return null;
+  const candidate = match[1].trim().toLowerCase();
+  if (
+    !candidate ||
+    candidate.length < 4 ||
+    candidate.length > 48 ||
+    /^(doing what you want|doing that|doing this|doing it|what you want|it|this|that|anything|something|saying yes)$/i.test(
+      candidate,
+    ) ||
+    /\b(you|your|yours|yourself)\b/i.test(candidate)
+  ) {
+    return null;
+  }
+  return candidate;
+}
 
-  const candidate = (filtered[0] || raw)
-    .replace(
-      /\b(hey so|i was thinking and|i don't know maybe|it's nothing but|no pressure though|sorry this is long|to be honest|tbh|like|basically)\b/gi,
-      "",
+function detectInterpersonalArchetype(
+  raw: string,
+  lower: string,
+  timeRef: string | null,
+  subject: string | null,
+): { calibrations: VoiceCalibration; notes: string[] } | null {
+  // 1. Guilt, emotional pressure, manipulation, coercion ("You can't guilt me into doing what you want")
+  if (
+    /\b(guilt|guilting|guilt-trip|pressure|pressuring|manipulat|coerce|twist my arm|make me feel bad|doing what you want|talk me into|push me into|force me|forcing me|you can't make me|you cant make me|stop pushing|take no for an answer|already said no)\b/i.test(
+      lower,
     )
-    .replace(/\b(idiot|stupid|worthless|pathetic|loser|useless|trash|ridiculous|unbelievable)\b/gi, "")
-    .replace(/!{2,}/g, ".")
-    .replace(/\s+/g, " ")
-    .trim();
+  ) {
+    const specificAction = extractSpecificActionAfterInto(raw);
+    const onTopic = specificAction ? ` on ${specificAction}` : "";
+    const toTopic = specificAction ? ` to ${specificAction}` : "";
+    return {
+      calibrations: {
+        direct: `I hear what you're asking for, and my answer${onTopic} is still no. Pushing harder won't change what works for me — I need you to respect my decision.`,
+        warm: `I care about our relationship, and I don't want resentment between us — which is why I can't say yes${toTopic} out of guilt. I need to stick with what feels right for me here.`,
+        concise: `My decision${onTopic} is firm, and I'm not comfortable being pressured to change it.`,
+      },
+      notes: [
+        "Shifted from second-person accusation (“You can’t guilt me…”) to a settled first-person boundary (“My decision is firm”).",
+        "Removed the power-struggle framing (“doing what you want”) so there is no hook for the other person to argue with.",
+        "Stated your answer as final without apologizing or over-explaining.",
+      ],
+    };
+  }
 
-  return candidate.replace(/^[,.\s]+|[,.\s]+$/g, "");
+  // 2. Control, autonomy, micromanagement ("Stop telling me what to do", "You can't control me")
+  if (
+    /\b(control me|controlling|boss me|stop telling me|don't tell me what to do|dont tell me what to do|run my life|my life|my choice|back off|mind your own|none of your business|butt out|stop micromanaging|let me do my job)\b/i.test(
+      lower,
+    )
+  ) {
+    const about = subject ? ` with ${subject}` : " here";
+    return {
+      calibrations: {
+        direct: `I appreciate that you have a perspective${about}, and this is my decision to make. I'm handling it on my end and will let you know if I need input.`,
+        warm: `I know you want this to go well, and I need the space to handle this my own way. Thank you for trusting my judgment${about}.`,
+        concise: `I've got this handled on my end and need the space to make my own call${about}.`,
+      },
+      notes: [
+        "Replaced reactive pushback with calm ownership of your autonomy and decision rights.",
+        "Acknowledged their intent briefly while drawing an unmistakable boundary around who owns the call.",
+      ],
+    };
+  }
+
+  // 3. Feeling unheard, interrupted, dismissed, invalidated ("You never listen to me", "Stop talking over me")
+  if (
+    /\b(never listen|don't listen|dont listen|not listening|talking over me|talk over me|interrupt|dismiss|invalidat|hear a word|talking to a wall|talk to a wall|ignore what i say|don't care how i feel|my feelings don't matter)\b/i.test(
+      lower,
+    )
+  ) {
+    return {
+      calibrations: {
+        direct: `I don't feel heard right now. Before we move on, I need two minutes to finish my point without being interrupted.`,
+        warm: `I really want us to understand each other here, and right now I feel like my perspective is getting lost. Can we slow down so I can share where I'm coming from?`,
+        concise: `I don't feel heard right now — can we slow down so I can finish my thought?`,
+      },
+      notes: [
+        "Replaced global accusation (“You never listen”) with a present-moment observation (“I don't feel heard right now”).",
+        "Made a specific, doable request to slow the pace of the conversation.",
+      ],
+    };
+  }
+
+  // 4. Disrespect, condescension, sharp tone ("Don't talk to me like that", "Watch your tone", "Who do you think you are")
+  if (
+    /\b(talk to me like that|speak to me like that|watch your tone|watch your mouth|who do you think you are|disrespect|condescend|patroniz|talk down to me|your attitude|being rude|so rude to me|treat me like)\b/i.test(
+      lower,
+    )
+  ) {
+    const when = timeRef || "later today";
+    return {
+      calibrations: {
+        direct: `I'm open to working through this disagreement, and I need us to speak to each other with respect. If the tone stays sharp, I'm going to pause and revisit this ${when}.`,
+        warm: `I want to hear what's on your mind, and it's hard for me to stay open when the tone feels sharp. Can we take the heat down a notch and talk this through respectfully?`,
+        concise: `I'm happy to talk this through as long as we keep our tone respectful with each other.`,
+      },
+      notes: [
+        "Set a clear condition for continuing the conversation instead of matching their sharpness.",
+        "Paired the boundary with willingness to solve the issue once the tone resets.",
+      ],
+    };
+  }
+
+  // 5. Blame-shifting / "Not my fault" / "You messed up" / "Do your own work"
+  if (
+    /\b(not my fault|not my problem|your fault|you messed up|you screwed up|you broke|you ruined|clean up your mess|not my job|figure it out yourself|deal with it yourself|stop blaming me|don't blame me)\b/i.test(
+      lower,
+    )
+  ) {
+    const topic = subject || "this";
+    return {
+      calibrations: {
+        direct: `Rather than trading blame on ${topic}, I want to focus on how we fix it. Here is the piece I can own on my end — let's clarify who is handling the rest.`,
+        warm: `I know ${topic} is stressful for both of us right now. Let's step out of pointing fingers and agree on what each of us can take on from here.`,
+        concise: `Instead of trading blame on ${topic}, let's clarify what each of us is owning to fix it.`,
+      },
+      notes: [
+        "Pivoted from fault-finding to clear division of ownership so the conversation can move forward.",
+        "Protected your boundary around what you own without sounding dismissive.",
+      ],
+    };
+  }
+
+  // 6. Selfishness / One-sided effort / Lack of reciprocity
+  if (
+    /\b(selfish|only care about yourself|all about you|one-sided|i do everything|pull your weight|carry the load|never help|don't help|dont help|inconsiderate|take me for granted)\b/i.test(
+      lower,
+    )
+  ) {
+    return {
+      calibrations: {
+        direct: `Right now the effort between us feels uneven, and I'm starting to feel resentful. I need us to share the load more fairly going forward.`,
+        warm: `I'm feeling stretched thin carrying this on my own, and I don't want that to turn into resentment between us. Can we talk about how to balance this more evenly?`,
+        concise: `This feels one-sided right now — I need us to share the effort more evenly.`,
+      },
+      notes: [
+        "Translated a character label (“selfish”) into the concrete impact on your energy and the relationship.",
+        "Named the need for shared effort before resentment builds further.",
+      ],
+    };
+  }
+
+  // 7. Dishonesty / Broken promises / Trust / Excuses
+  if (
+    /\b(lying|lied to me|you lie|dishonest|bullshit|full of excuses|all excuses|can't trust|cant trust|don't trust|dont trust|broke your promise|promised me|story keeps changing)\b/i.test(
+      lower,
+    )
+  ) {
+    return {
+      calibrations: {
+        direct: `What you're sharing now doesn't match what we agreed on earlier, and that makes it hard for me to trust where things stand. I need a straightforward answer so I know how to proceed.`,
+        warm: `Trust matters a lot to me, and right now the mixed signals are leaving me uneasy. Can we be completely transparent with each other about what's actually happening?`,
+        concise: `The mixed signals are making it hard to trust where things stand — I need a straightforward answer here.`,
+      },
+      notes: [
+        "Named the gap between prior commitments and current actions without using inflammatory labels.",
+        "Anchored the request on clarity and rebuilding trust.",
+      ],
+    };
+  }
+
+  // 8. Overwhelm / Exhaustion / Need space ("I'm sick of this", "I'm done", "Leave me alone")
+  if (
+    /\b(sick of|tired of|fed up|over this|had enough|i'm done|im done|can't do this anymore|cant do this anymore|leave me alone|stop texting me|give me space|at my limit|exhausting)\b/i.test(
+      lower,
+    )
+  ) {
+    const when = timeRef || "tomorrow";
+    return {
+      calibrations: {
+        direct: `I'm at capacity with this conversation right now and continuing isn't going to be productive. I'm taking some space and will reach out ${when} when I have a clear head.`,
+        warm: `I'm feeling really drained right now and don't want to say something out of exhaustion. Let me take some space to reset, and let's revisit this ${when}.`,
+        concise: `I'm at capacity right now and need to step back. Let's revisit this ${when}.`,
+      },
+      notes: [
+        "Converted an emotional cutoff (“I'm done / Leave me alone”) into a healthy, time-bounded pause.",
+        "Reassured the other person when you will return so taking space doesn't read as abandonment.",
+      ],
+    };
+  }
+
+  // 9. Saying No / Refusal / Declining ("I don't want to", "I'm not doing that", "No way")
+  if (
+    /\b(i don't want to|i dont want to|i'm not going to|im not going to|i'm not doing|im not doing|no way|i won't do|i wont do|i refuse|count me out|don't have time|not happening)\b/i.test(
+      lower,
+    )
+  ) {
+    const about = subject ? ` on ${subject}` : " on this";
+    return {
+      calibrations: {
+        direct: `I won't be able to take this on right now. My bandwidth is spoken for, so I need to pass${about}.`,
+        warm: `Thank you for thinking of me — I need to pass${about} right now so I can honor my current commitments, and I hope it goes smoothly.`,
+        concise: `I don't have the bandwidth for this right now, so I'll need to pass.`,
+      },
+      notes: [
+        "Delivered a clean, unambiguous “no” without defensiveness or over-justifying.",
+      ],
+    };
+  }
+
+  return null;
 }
 
 function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult): {
@@ -123,20 +299,15 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
     }
 
     case "brief": {
+      const archetype = detectInterpersonalArchetype(raw, lower, timeRef, subject);
+      if (archetype) return archetype;
+
       notes.push("Stripped self-deprecating hedges and preamble so the recipient can answer in ten seconds.");
-      const core = cleanUserClause(raw);
       const timeAsk = timeRef ? ` for ${timeRef}` : " this week";
       const topicAsk = subject || "this";
-      const hasQuestion = raw.includes("?");
-      const directCore =
-        core.length > 15 && core.length < 140
-          ? ensurePeriod(core.charAt(0).toUpperCase() + core.slice(1))
-          : `Does ${timeRef || "Thursday"} still work for ${topicAsk}, or should we pick another day?`;
       return {
         calibrations: {
-          direct: hasQuestion
-            ? directCore
-            : `Quick check on ${topicAsk} — does our plan${timeAsk} still work on your end, or should we adjust?`,
+          direct: `Quick check on ${topicAsk} — does our plan${timeAsk} still work on your end, or should we adjust?`,
           warm: `Hey! Checking in on ${topicAsk}${timeAsk} — let me know if that timing still works for you or if another day is easier.`,
           concise: `Still good for ${topicAsk}${timeAsk}, or should we pick another time?`,
         },
@@ -267,6 +438,11 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
         };
       }
 
+      const archetype = detectInterpersonalArchetype(raw, lower, timeRef, subject);
+      if (archetype) {
+        return archetype;
+      }
+
       if (/\b(you always|you never)\b/i.test(lower)) {
         notes.push("Shifted from “you always / you never” (which triggers instant defensiveness) to today's specific situation and what you need next.");
         const about = subject || "this";
@@ -281,20 +457,39 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
         };
       }
 
-      const cleaned = cleanUserClause(raw);
-      const baseSentence =
-        cleaned.length > 8
-          ? ensurePeriod(cleaned.charAt(0).toUpperCase() + cleaned.slice(1))
-          : `I want to make sure we're aligned on ${subject || "this"}.`;
+      // Second-person ("you...") or imperatives ("stop...", "don't...") or tense/destructive drafts:
+      // Transform into a first-person boundary so we NEVER echo raw user text back.
+      const aboutPhrase = subject ? ` about ${subject}` : "";
+      const onTopic = subject ? ` on ${subject}` : " on this";
+      const whenPhrase = timeRef ? ` ${timeRef}` : " when we both have a clear head";
 
+      if (
+        tone.label === "destructive" ||
+        tone.label === "negative" ||
+        /\b(you|your|you're|youre|stop|don't|dont|can't|cant|won't|wont|why)\b/i.test(lower)
+      ) {
+        notes.push(
+          "Shifted from second-person pushback to a calm, first-person boundary that holds your ground without escalating.",
+        );
+        notes.push(
+          "Removed adversarial framing so the other person has to respond to your boundary rather than your tone.",
+        );
+        return {
+          calibrations: {
+            direct: `Where we stand right now${aboutPhrase} isn't working for me. I want to be upfront about my boundary here and agree on a clear path forward${timeRef ? ` by ${timeRef}` : ""}.`,
+            warm: `I care about getting this right between us${aboutPhrase}, and I don't want tension to get in the way. Can we step back and talk through what works for both of us${whenPhrase}?`,
+            concise: `This isn't working for me as-is — let's step back and align${onTopic}${timeRef ? ` ${timeRef}` : ""}.`,
+          },
+          notes,
+        };
+      }
+
+      notes.push("Structured your note into a clear, low-friction check-in with an easy next step.");
       return {
         calibrations: {
-          direct: `${baseSentence} Let me know what works on your end${timeRef ? ` by ${timeRef}` : ""}.`.replace(
-            /\.\s+Let/,
-            " — let",
-          ),
-          warm: `Hey — ${baseSentence.charAt(0).toLowerCase() + baseSentence.slice(1)} Open to talking this through${timeRef ? ` ${timeRef}` : " when you have a moment"}?`,
-          concise: baseSentence,
+          direct: `Wanted to align${onTopic} and make sure we're on the same page. Let me know what works best on your end${timeRef ? ` by ${timeRef}` : ""}.`,
+          warm: `Hey — wanted to check in${aboutPhrase} and see how things look on your end. Open to aligning on next steps${timeRef ? ` ${timeRef}` : " when you have a moment"}?`,
+          concise: `Quick check-in${aboutPhrase} — let me know what works on your end${timeRef ? ` by ${timeRef}` : ""}.`,
         },
         notes,
       };
@@ -349,7 +544,7 @@ export function studioRewrite(slug: string, raw: string): StudioResult {
   const afterTone: ToneResult = {
     ...rawAfter,
     label: rawAfter.label === "destructive" || rawAfter.label === "negative" ? "neutral" : "positive",
-    score: Math.max(0.62, rawAfter.score),
+    score: Math.min(0.84, Math.max(0.68, rawAfter.score)),
   };
 
   return {

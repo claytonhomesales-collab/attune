@@ -11,7 +11,7 @@ const POSITIVE = [
   "excited",
   "grateful",
   "sorry",
-  "i hear you",
+  "i hear",
   "that makes sense",
   "i understand",
   "well done",
@@ -31,6 +31,14 @@ const POSITIVE = [
   "completely right",
   "100% fair",
   "let's lock",
+  "my decision",
+  "respect my",
+  "works for me",
+  "not comfortable",
+  "talk this through",
+  "on the same page",
+  "when you're ready",
+  "fair to you",
 ];
 
 const NEGATIVE = [
@@ -42,6 +50,8 @@ const NEGATIVE = [
   "fine.",
   "i guess",
   "not my problem",
+  "not my fault",
+  "your fault",
   "you always",
   "you never",
   "seriously?",
@@ -61,11 +71,46 @@ const NEGATIVE = [
   "is a mess",
   "done being polite",
   "sick of",
+  "fed up",
   "deal with it",
   "or don't bother",
   "pulling the offer",
   "haven't heard back",
   "never listen",
+  "don't listen",
+  "guilt me",
+  "guilt trip",
+  "guilting",
+  "force me",
+  "forcing me",
+  "pressure me",
+  "pressuring me",
+  "make me feel bad",
+  "doing what you want",
+  "control me",
+  "controlling",
+  "stop pushing",
+  "back off",
+  "leave me alone",
+  "stop trying to",
+  "you can't make me",
+  "you cant make me",
+  "manipulat",
+  "gaslight",
+  "bullshit",
+  "hypocrite",
+  "selfish",
+  "talk to me like that",
+  "watch your tone",
+  "who do you think you are",
+  "already told you",
+  "how many times",
+  "unreasonable",
+  "unfair",
+  "disrespect",
+  "inconsiderate",
+  "don't blame me",
+  "stop blaming",
 ];
 
 const DESTRUCTIVE = [
@@ -80,11 +125,15 @@ const DESTRUCTIVE = [
   "kill yourself",
   "nobody likes",
   "you're crazy",
-  "gaslighting",
-  "manipulat",
+  "you are crazy",
   "disgusting",
   "trash",
   "useless",
+  "moron",
+  "incompetent",
+  "asshole",
+  "fuck you",
+  "screw you",
 ];
 
 const REPAIR = [
@@ -116,7 +165,7 @@ function labelFromScore(score: number, destructiveHits: number): ToneLabel {
 }
 
 export function analyzeHeuristic(text: string): ToneResult {
-  const normalized = text.trim().toLowerCase();
+  const normalized = text.trim().toLowerCase().replace(/’/g, "'");
   if (!normalized) {
     return {
       label: "neutral",
@@ -138,21 +187,29 @@ export function analyzeHeuristic(text: string): ToneResult {
     text.length > 8 && text === text.toUpperCase() && /[A-Z]/.test(text);
   const questionMarks = (text.match(/\?/g) || []).length;
   const shortCold =
-    /^(k|ok|fine|sure|whatever|idc|k\.)$/i.test(text.trim()) ||
+    /^(k|ok|fine|sure|whatever|idc|k\.|nope|nah)$/i.test(text.trim()) ||
     normalized === "fine.";
+
+  // Detect second-person accusatory patterns ("you can't...", "you don't...", "stop...")
+  const accusatory =
+    /\b(you can't|you cant|you don't|you dont|you won't|you wont|you only|why do you|why can't you|stop\s+\w+ing)\b/i.test(
+      normalized,
+    );
 
   let score =
     pos.count * 0.28 +
     repair.count * 0.35 -
-    neg.count * 0.32 -
+    neg.count * 0.34 -
     des.count * 0.75;
 
   if (shortCold) score -= 0.35;
+  if (accusatory && pos.count === 0) score -= 0.28;
   if (allCaps) score -= 0.25;
   if (exclamations >= 3) score -= 0.1;
-  if (questionMarks >= 1 && pos.count === 0 && neg.count === 0) score += 0.05;
+  if (questionMarks >= 1 && pos.count === 0 && neg.count === 0 && !accusatory) score += 0.05;
 
-  score = Math.max(-1, Math.min(1, score));
+  const minFloor = des.count > 0 ? -1 : -0.56;
+  score = Math.max(minFloor, Math.min(1, score));
   const label = labelFromScore(score, des.count);
 
   const signals = [
@@ -161,6 +218,7 @@ export function analyzeHeuristic(text: string): ToneResult {
     ...neg.hits.map((h) => `tense: ${h}`),
     ...des.hits.map((h) => `harm: ${h}`),
   ];
+  if (accusatory && neg.hits.length === 0) signals.push("defensive pushback");
   if (shortCold) signals.push("curt reply");
   if (allCaps) signals.push("shouting");
   if (signals.length === 0) signals.push("plain wording");
@@ -174,7 +232,7 @@ export function analyzeHeuristic(text: string): ToneResult {
 
   const confidence = Math.min(
     0.95,
-    0.5 + (pos.count + neg.count + des.count + repair.count) * 0.12,
+    0.5 + (pos.count + neg.count + des.count + repair.count + (accusatory ? 1 : 0)) * 0.12,
   );
 
   return {
@@ -192,11 +250,14 @@ export function softenSuggestion(text: string, tone: ToneResult): string | null 
   if (tone.label === "destructive") {
     return "Strip personal attacks and name the exact boundary + next step instead.";
   }
+  if (/guilt|pressure|force|manipulat|doing what you want/i.test(text)) {
+    return "Instead of accusing them of guilting you, state your decision calmly as a settled boundary.";
+  }
   if (/you always|you never/i.test(text)) {
     return "Replace “you always / you never” with today’s specific moment and the time you need an answer.";
   }
   if (/^(fine|whatever|k|ok)\.?$/i.test(text.trim())) {
     return "A one-word shutdown reads as stonewalling. State that you need a breather and when you’ll revisit.";
   }
-  return "Lead with the concrete fact and the exact next action you need.";
+  return "Lead with your clear boundary or request instead of pushing back on their motives.";
 }

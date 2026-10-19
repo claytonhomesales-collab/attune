@@ -19,7 +19,7 @@ function HeaderNav() {
   const cart = useCart();
 
   return (
-    <nav className="flex flex-wrap items-center gap-1 text-sm md:gap-1.5">
+    <nav className="flex items-center gap-1 overflow-x-auto text-sm md:gap-1.5">
       {links.map((link) => {
         const active =
           link.href === "/"
@@ -31,7 +31,7 @@ function HeaderNav() {
           <Link
             key={link.href}
             href={link.href}
-            className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all ${
+            className={` shrink-0 rounded-full px-2.5 py-1.5 text-[12px] font-medium transition-all sm:px-3.5 sm:text-[13px] ${
               active
                 ? "bg-obsidian text-foam shadow-sm"
                 : "text-ink-soft hover:bg-ink/5 hover:text-ink"
@@ -43,7 +43,7 @@ function HeaderNav() {
       })}
       <Link
         href="/cart"
-        className={`ml-1 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all ${
+        className={`ml-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition-all sm:ml-1 sm:gap-2 sm:px-4 sm:text-[13px] ${
           cart.count > 0
             ? "bg-sea-deep text-foam shadow-sm hover:bg-sea"
             : pathname === "/cart"
@@ -53,7 +53,7 @@ function HeaderNav() {
       >
         <span>Cart</span>
         {cart.count > 0 ? (
-          <span className="rounded-full bg-gold/25 px-2 py-0.5 font-mono text-[11px] font-semibold text-gold">
+          <span className="rounded-full bg-gold/25 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-gold sm:px-2 sm:text-[11px]">
             {cart.count} · {formatMoney(cart.monthlyCents)}
           </span>
         ) : (
