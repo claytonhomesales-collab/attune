@@ -459,7 +459,7 @@ function crisp(text: string): string {
   }
   let words = chosen.split(/\s+/).filter(Boolean);
   if (words.length > 12) words = words.slice(0, 12);
-  while (words.length > 4 && /^(the|a|an|and|or|but|when|since|of|to|for|with|on|in|at|by)$/i.test(words[words.length - 1] || "")) {
+  while (words.length > 4 && /^(the|a|an|and|or|but|when|since|of|to|for|with|on|in|at|by|before|after|until|about|from|into|over)$/i.test(words[words.length - 1] || "")) {
     words.pop();
   }
   const done = sentence(words.join(" "));
