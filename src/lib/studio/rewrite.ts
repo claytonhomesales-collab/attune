@@ -32,9 +32,12 @@ function normalizeForMatch(text: string): string {
 function extractTimeReference(text: string): string | null {
   const withoutNotice = text.replace(/\b\d+\s*(?:minutes|mins|hours)\s+before\b/gi, " ");
   const match = withoutNotice.match(
-    /\b((?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tonight|tomorrow|this afternoon|this morning)(?:\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)?|\d{1,2}(?::\d{2})?\s*(?:am|pm)|this week|next week)\b/i,
+    /\b((?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tonight|tomorrow|this afternoon|this morning)(?:\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)?|\d{1,2}(?::\d{2})?\s*(?:am|pm)|at\s+\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?|this week|next week)\b/i,
   );
-  return match ? match[1] : null;
+  if (!match) return null;
+  let value = match[1].replace(/^at\s+/i, "");
+  if (/^\d{1,2}$/.test(value)) value = `${value}:00`;
+  return value;
 }
 
 function extractNotice(text: string): string | null {
@@ -59,7 +62,11 @@ function extractSubject(text: string): string | null {
     [/\b(proposal|contract|quote|pricing|deal|agreement)\b/, "the proposal"],
     [/\b(renewal|subscription|invoice|charge|billing|plan)\b/, "your account"],
     [/\b(ticket|bug|issue|error|outage|export|sync)\b/, "this issue"],
-    [/\b(backpack|homework|folder|jacket|clothes|bag)\b/, "the school bag"],
+    [/\bbackpack\b/, "the backpack"],
+    [/\b(homework|folder)\b/, "the homework"],
+    [/\bjacket\b/, "the jacket"],
+    [/\bclothes\b/, "the clothes"],
+    [/\bbag\b/, "the bag"],
     [/\b(pickup|drop-off|dropoff|handoff|schedule|weekend)\b/, "the pickup schedule"],
     [/\b(interview|role|candidate|offer|profile|resume)\b/, "the role"],
     [/\b(meeting|standup|review|1:1|sync)\b/, "our review"],
@@ -90,6 +97,27 @@ function extractSpecificActionAfterInto(text: string): string | null {
   return candidate;
 }
 
+function fitsStudio(slug: string, lower: string): boolean {
+  switch (slug) {
+    case "repair":
+      return /\b(sorry|apolog|my bad|i was wrong|snapped)\b/i.test(lower);
+    case "deal":
+      return /\b(proposal|contract|pricing|discount|sign|onboarding|demo|buyer|quote|deal|invoice)\b/i.test(lower);
+    case "desk":
+      return /\b(ticket|refund|bug|outage|charge|customer|product|account|fix|invoice)\b/i.test(lower);
+    case "lead":
+      return /\b(deck|slide|spec|sprint|review|deadline|feedback|sloppy|team)\b/i.test(lower);
+    case "hire":
+      return /\b(candidate|interview|offer|profile|recruit|role|resume|hiring)\b/i.test(lower);
+    case "keep":
+      return /\b(renewal|login|usage|seat|invoice|subscription)\b/i.test(lower);
+    case "steady":
+      return /\b(backpack|bag|kid|kids|pickup|drop-off|drop off|handoff|school|custody|homework)\b/i.test(lower);
+    default:
+      return true;
+  }
+}
+
 function sentence(text: string): string {
   const value = text.replace(/\s+/g, " ").trim();
   if (!value) return value;
@@ -113,6 +141,7 @@ function isCalmDraft(raw: string, lower: string, tone: ToneResult): boolean {
   ) {
     return false;
   }
+  if (/\b(asap|impressive profile|amazing opportunity|perfect for)\b/i.test(lower)) return false;
   return raw.includes("?") || /^(please|can you|could you|would you|checking|quick|just checking|let me know)\b/i.test(raw.trim());
 }
 
@@ -397,6 +426,11 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
   const subject = extractSubject(raw);
   const notes: string[] = [];
 
+  if (isCalmDraft(raw, lower, tone)) return calmCalibrations(raw);
+
+  const archetype = detectInterpersonalArchetype(raw, lower, timeRef, subject);
+  if (archetype) return archetype;
+
   if (tone.label === "destructive") {
     notes.push("Removed personal attacks and contemptuous phrasing so the recipient focuses on your actual request.");
   } else if (tone.label === "negative") {
@@ -405,12 +439,14 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
     notes.push("Tightened the structure so your main ask lands in the first sentence.");
   }
 
-  switch (slug) {
+  const route = fitsStudio(slug, lower) ? slug : "pause";
+
+  switch (route) {
     case "repair": {
       notes.push("Eliminated any defensive “but” clause so the apology reads as genuine ownership.");
       notes.push("Closed with a concrete invitation to reset when the other person is ready.");
       const topicPhrase = subject ? ` about ${subject}` : "";
-      const whenPhrase = timeRef ? ` ${timeRef}` : " tonight";
+      const whenPhrase = timeRef ? ` ${timeRef}` : "";
       return {
         calibrations: {
           direct: `I'm sorry for how sharply I came across earlier${topicPhrase}. Even though I was stressed, my tone wasn't fair to you. When you're ready${whenPhrase}, I'd like to talk it through calmly and hear your side.`,
@@ -427,13 +463,17 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
       if (archetype) return archetype;
 
       notes.push("Stripped self-deprecating hedges and preamble so the recipient can answer in ten seconds.");
-      const timeAsk = timeRef ? ` for ${timeRef}` : " this week";
       const topicAsk = subject || "this";
+      const timed = timeRef ? ` for ${timeRef}` : "";
       return {
         calibrations: {
-          direct: `Quick check on ${topicAsk} — does our plan${timeAsk} still work on your end, or should we adjust?`,
-          warm: `Hey! Checking in on ${topicAsk}${timeAsk} — let me know if that timing still works for you or if another day is easier.`,
-          concise: `Still good for ${topicAsk}${timeAsk}, or should we pick another time?`,
+          direct: timeRef
+            ? `Quick check on ${topicAsk} — does ${timeRef} still work on your end, or should we adjust?`
+            : `Quick check on ${topicAsk} — does the current plan still work, or should we adjust?`,
+          warm: `Hey — checking in on ${topicAsk}${timed}. Let me know if that still works, or if another time is easier.`,
+          concise: timeRef
+            ? `Still good for ${topicAsk} ${timeRef}?`
+            : `Still good for ${topicAsk}, or should we pick another time?`,
         },
         notes,
       };
@@ -441,13 +481,18 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
 
     case "deal": {
       notes.push("Replaced artificial pressure with an operational timeline and a clear yes/no decision frame.");
-      const deadline = timeRef || "Friday at 3pm";
-      const topic = subject || "the proposal";
+      const topic = subject || "this";
       return {
         calibrations: {
-          direct: `To hold your implementation slot on our schedule, we'd need sign-off on ${topic} by ${deadline}. Should we lock that date in, or would pushing kickoff to next month fit your team's bandwidth better?`,
-          warm: `Wanted to check in on timing for ${topic}. We're holding your onboarding slot through ${deadline} — would you like to keep that date, or release it for now and reconnect when your team is ready?`,
-          concise: `We're holding your onboarding slot for ${topic} through ${deadline}. Should we lock that in, or push kickoff to next month?`,
+          direct: timeRef
+            ? `To hold the date on ${topic}, we need a decision by ${timeRef}. Should we lock that in, or push it?`
+            : `I need a clear decision on ${topic}: should we move ahead, pause, or pass?`,
+          warm: timeRef
+            ? `Checking on ${topic}. We can hold the date through ${timeRef} — want to keep it, or release it for now?`
+            : `Checking on ${topic}. Do you want to move ahead, pause, or pass?`,
+          concise: timeRef
+            ? `Decision on ${topic} by ${timeRef}: lock it in, or push it?`
+            : `On ${topic}: move ahead, pause, or pass?`,
         },
         notes,
       };
@@ -456,13 +501,13 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
     case "desk": {
       notes.push("Validated the customer's frustration immediately instead of opening with policy or excuses.");
       notes.push("Assigned personal ownership and a specific clock time for the next update.");
-      const eta = timeRef || "2:00pm today";
-      const issue = subject || "your account";
+      const issue = subject || "this";
+      const when = timeRef ? `by ${timeRef}` : "today";
       return {
         calibrations: {
-          direct: `You are completely right to be frustrated — waiting on ${issue} without a clear resolution is unacceptable on our end. I've taken personal ownership of this ticket right now and will email you directly by ${eta} with the fix or confirmed next step.`,
-          warm: `I'm really sorry for the frustration around ${issue} — that's not the experience you should ever have with us. I am personally holding this from here until it's resolved, and I'll send you a direct update by ${eta}.`,
-          concise: `I'm sorry for the delay on ${issue}. I've taken personal ownership of your ticket and will update you directly by ${eta}.`,
+          direct: `You're right to be frustrated about ${issue}. I've taken it on personally, and I'll update you ${when} with the fix or the next step.`,
+          warm: `I'm sorry this has been frustrating. I'm holding ${issue} from here, and I'll write you ${when} with where it stands.`,
+          concise: `I'm sorry about ${issue}. I own it from here and will update you ${when}.`,
         },
         notes,
       };
@@ -472,24 +517,28 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
       notes.push("Separated the quality bar of the work from personal criticism of the individual.");
       notes.push("Named a specific deadline and offered a concrete way to unblock progress.");
       const artifact = subject || "this draft";
-      const due = timeRef || "10:00am tomorrow";
+      const label = artifact.charAt(0).toUpperCase() + artifact.slice(1);
+      const due = timeRef ? ` before ${timeRef}` : "";
       return {
         calibrations: {
-          direct: `The structure in ${artifact} isn't ready for review yet — we need the key metrics and takeaway clear at the top before ${due}. Can you revise that section today? Happy to mark up the first section as an example if helpful.`,
-          warm: `Thanks for getting ${artifact} started. Before we bring this to review, we need to tighten the main takeaway so the headline numbers land immediately. Want to hop on a 10-minute huddle so we can get it locked before ${due}?`,
-          concise: `We need to sharpen the headline takeaway in ${artifact} before ${due}. Let me know if a quick 10-minute walkthrough helps.`,
+          direct: `${label} isn't ready for review yet. The main point needs to be unmistakable at the top${due}. I can mark up the first section if that helps.`,
+          warm: `Thanks for the first pass on ${artifact}. The main point needs to lead${due}. Want to walk through it together?`,
+          concise: `The main point in ${artifact} needs to lead${due}. I can mark up the first section.`,
         },
         notes,
       };
     }
 
     case "hire": {
-      notes.push("Replaced generic flattery with peer-level specificity and an easy opt-out.");
+      notes.push("Replaced generic flattery with a specific reason to write and an easy way to say no.");
+      const minutes = raw.match(/\b(\d+\s*(?:min|mins|minutes))\b/i)?.[1];
+      const intro = minutes || "a short intro";
+      const when = timeRef ? ` ${timeRef}` : "";
       return {
         calibrations: {
-          direct: `I came across your recent engineering work and wanted to reach out directly. We're hiring a senior lead to own our core product architecture. Would you be open to a 15-minute intro chat ${timeRef || "next week"}, or would you prefer I send the written brief over email first?`,
-          warm: `Hi — I really admired the craft in your recent work and thought of you for a founding role we just opened. Even if you aren't actively looking, I'd love to send over the technical one-pager or grab 15 minutes ${timeRef || "next week"} if you're curious.`,
-          concise: `Admired your recent work — we're hiring a senior lead for our core architecture. Open to a 15-minute chat ${timeRef || "next week"}, or want me to send the brief first?`,
+          direct: `I wanted to reach out about a role that fits work you've already done. Open to ${intro}${when}, or I can send a short brief first.`,
+          warm: `Hi — I had a specific reason for writing, and there's no pressure to be looking. I can send a one-page brief, or we can do ${intro}${when} if you're curious.`,
+          concise: `Open to ${intro}${when}, or want the brief first?`,
         },
         notes,
       };
@@ -499,9 +548,9 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
       notes.push("Anchored the check-in around account value and reduced the ask to a one-line decision.");
       return {
         calibrations: {
-          direct: `Ahead of your upcoming renewal, I wanted to make this easy to answer in one line: should we keep your current plan and seat count as-is for the new term, or would you like to adjust anything before ${timeRef || "the 1st"}?`,
-          warm: `I know your schedule is packed, so no need for a long call — with your renewal coming up, would you like to leave your current setup in place as-is, or spend 15 minutes reviewing your team's usage ${timeRef || "this week"}?`,
-          concise: `With your renewal coming up, should we keep your current plan as-is, or adjust seat count before ${timeRef || "next month"}?`,
+          direct: `Ahead of your renewal, one question: keep the current plan as-is, or adjust it${timeRef ? ` before ${timeRef}` : " before it renews"}?`,
+          warm: `I'll keep this to one line. With your renewal coming up, should the current plan stay as-is, or do you want to change it${timeRef ? ` before ${timeRef}` : ""}?`,
+          concise: `Renewal question: keep the plan as-is, or adjust it${timeRef ? ` before ${timeRef}` : ""}?`,
         },
         notes,
       };
@@ -509,13 +558,32 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
 
     case "steady": {
       notes.push("Applied the BIFF standard (Brief, Informative, Friendly, Firm) — keeping only logistics and the child's need.");
-      const pickupTime = timeRef || "5:00pm today";
-      const item = subject || "the school bag";
+      const item = subject;
+      const when = timeRef;
+      const direct = item && when
+        ? `Please include ${item} at the ${when} handoff. Thank you.`
+        : item
+          ? `Please include ${item} at the handoff. Thank you.`
+          : when
+            ? `Please confirm the ${when} handoff and what should come with them. Thank you.`
+            : "Please send the handoff time and what should come with them. Thank you.";
       return {
         calibrations: {
-          direct: `Please include ${item} at the ${pickupTime} handoff so everything is ready for tomorrow morning. I will be at the usual spot at ${pickupTime}.`,
-          warm: `Hi — reminder to please bring ${item} for the ${pickupTime} handoff so everything is set for tomorrow. Thank you, see you then.`,
-          concise: `Please include ${item} at the ${pickupTime} handoff. Thank you.`,
+          direct,
+          warm: item && when
+            ? `Hi — please bring ${item} for the ${when} handoff. Thank you.`
+            : item
+              ? `Hi — please bring ${item} to the handoff. Thank you.`
+              : when
+                ? `Hi — please confirm ${when} and what should come with them. Thank you.`
+                : "Hi — please send the handoff time and what they need to bring. Thank you.",
+          concise: item && when
+            ? `Please include ${item} at ${when}. Thank you.`
+            : item
+              ? `Please bring ${item}. Thank you.`
+              : when
+                ? `Please confirm ${when}. Thank you.`
+                : "Please send the handoff time. Thank you.",
         },
         notes,
       };
@@ -600,13 +668,12 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
 
       if (/\b(you always|you never)\b/i.test(lower)) {
         notes.push("Shifted from “you always / you never” (which triggers instant defensiveness) to today's specific situation and what you need next.");
-        const about = subject || "this";
-        const when = timeRef ? ` ${timeRef}` : " tonight";
+        const about = subject || "what happened today";
         return {
           calibrations: {
-            direct: `Right now I'm frustrated about how we're handling ${about}. Instead of going back and forth over text, can we take 10 minutes${when} to agree on a clear plan?`,
-            warm: `I don't want us talking past each other on ${about}. Can we talk${when} so I can share what I need and hear where you're coming from?`,
-            concise: `I want to get on the same page about ${about}. Can we talk for 10 minutes${when}?`,
+            direct: `I'm not going to argue about always or never. I need a plan for ${about}${timeRef ? ` at ${timeRef}` : ""}.`,
+            warm: `I don't want to make this about always or never. Can we deal with ${about}${timeRef ? ` at ${timeRef}` : ""} and decide the next step?`,
+            concise: `Let's deal with ${about}, not with always or never.`,
           },
           notes,
         };
@@ -616,7 +683,7 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
       // Transform into a first-person boundary so we NEVER echo raw user text back.
       const aboutPhrase = subject ? ` about ${subject}` : "";
       const onTopic = subject ? ` on ${subject}` : " on this";
-      const whenPhrase = timeRef ? ` ${timeRef}` : " when we both have a clear head";
+      const whenPhrase = timeRef ? ` ${timeRef}` : "";
 
       if (
         tone.label === "destructive" ||
@@ -632,8 +699,8 @@ function buildContextualCalibrations(slug: string, raw: string, tone: ToneResult
         return {
           calibrations: {
             direct: `Where we stand right now${aboutPhrase} isn't working for me. I want to be upfront about my boundary here and agree on a clear path forward${timeRef ? ` by ${timeRef}` : ""}.`,
-            warm: `I care about getting this right between us${aboutPhrase}, and I don't want tension to get in the way. Can we step back and talk through what works for both of us${whenPhrase}?`,
-            concise: `This isn't working for me as-is — let's step back and align${onTopic}${timeRef ? ` ${timeRef}` : ""}.`,
+            warm: `I want to sort this out${aboutPhrase}. Can we talk about the specific issue${whenPhrase}?`,
+            concise: `I'll talk about the actual issue${aboutPhrase}. I need it to be calm.`,
           },
           notes,
         };
