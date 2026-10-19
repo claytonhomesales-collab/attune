@@ -16,6 +16,12 @@
 - Optional AI classification via Vercel AI Gateway (`ai` SDK)
 - Local-first demo state (localStorage) — ready to swap for a database later
 
+## Public demo
+
+Live URL (temporary Vercel deploy): https://temporary-fast-silicon-z0rff2c.vercel.app
+
+Permanent production alias (after Vercel account link): https://attune-claytonhomesales-4166.vercel.app
+
 ## Run locally
 
 ```bash
