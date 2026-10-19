@@ -18,9 +18,7 @@
 
 ## Public demo
 
-Live URL (temporary Vercel deploy): https://temporary-fast-silicon-z0rff2c.vercel.app
-
-Permanent production alias (after Vercel account link): https://attune-claytonhomesales-4166.vercel.app
+https://attune-livid.vercel.app
 
 ## Run locally
 
